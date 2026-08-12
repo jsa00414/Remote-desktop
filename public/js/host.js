@@ -10,8 +10,11 @@
   let socket = null;
   let sharing = false;
   let hostInfo = null;
-  let frameTimer = null;
-  let sending = false;
+  let busy = false;
+  let framesSent = 0;
+  let tickWorker = null;
+  let keepAliveAudio = null;
+  let statusTimer = null;
 
   const captureVideo = document.createElement("video");
   captureVideo.muted = true;
@@ -21,10 +24,24 @@
   captureVideo.autoplay = true;
 
   const captureCanvas = document.createElement("canvas");
-  const captureCtx = captureCanvas.getContext("2d", { alpha: false });
+  const captureCtx = captureCanvas.getContext("2d", {
+    alpha: false,
+    desynchronized: true,
+  });
 
   shareBtn.addEventListener("click", startSharing);
   stopBtn.addEventListener("click", stopSharing);
+
+  document.addEventListener("visibilitychange", () => {
+    if (!sharing) return;
+    if (document.hidden) {
+      setMessage(
+        `Streaming in background… ${framesSent} frames sent. Leave this tab open on the host PC.`
+      );
+    } else {
+      setMessage(`Online as “${hostInfo?.name || "host"}”. Frames sent: ${framesSent}`);
+    }
+  });
 
   async function startSharing() {
     const setupCode = setupCodeInput.value.trim();
@@ -39,23 +56,24 @@
     try {
       displayStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          frameRate: 8,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          frameRate: { ideal: 8, max: 12 },
+          width: { ideal: 1280, max: 1280 },
+          height: { ideal: 720, max: 720 },
         },
         audio: false,
+        preferCurrentTab: false,
       });
     } catch (err) {
       shareBtn.disabled = false;
       const insecure = !window.isSecureContext;
       if (insecure) {
         setMessage(
-          "Screen capture needs HTTPS. Open https://74.208.54.132:5000/host (accept the certificate warning), then try again."
+          "Screen capture needs HTTPS. Open https://74.208.54.132:5000/host and accept the certificate warning."
         );
       } else if (err.name === "NotAllowedError") {
-        setMessage("Screen share permission denied. Click Allow in the browser prompt.");
+        setMessage("Screen share permission denied. Click Allow, and choose Entire Screen.");
       } else if (!navigator.mediaDevices?.getDisplayMedia) {
-        setMessage("This browser does not support screen sharing. Use Chrome or Edge on a computer to share.");
+        setMessage("Use Chrome or Edge on the host computer to share the screen.");
       } else {
         setMessage(`Could not start screen capture (${err.name || "error"}).`);
       }
@@ -72,6 +90,8 @@
       transports: ["websocket", "polling"],
       upgrade: true,
       rememberUpgrade: true,
+      reconnection: true,
+      reconnectionAttempts: 20,
     });
 
     try {
@@ -110,11 +130,25 @@
 
     hostInfo = ack.host;
     sharing = true;
+    framesSent = 0;
     shareBtn.hidden = true;
     stopBtn.hidden = false;
     setupCodeInput.disabled = true;
-    setMessage(`Online as “${hostInfo.name}”. Open the site on iPhone to view.`);
+    setMessage(
+      `Online as “${hostInfo.name}”. Keep this tab open, then connect from the other computer.`
+    );
 
+    socket.on("disconnect", () => {
+      if (sharing) setMessage("Disconnected from server — reconnecting…");
+    });
+    socket.on("connect", () => {
+      if (!sharing) return;
+      socket.emit("host:register", { setupCode }, (again) => {
+        if (again?.ok) {
+          setMessage(`Reconnected as “${hostInfo.name}”. Streaming…`);
+        }
+      });
+    });
     socket.on("host:replaced", () => {
       setMessage("Another session replaced this host.");
       stopSharing();
@@ -124,29 +158,88 @@
       stopSharing();
     });
     socket.on("client:joined", () => {
-      setMessage("Viewer connected — streaming to phone/computer.");
+      setMessage(`Viewer connected — streaming (${framesSent} frames sent so far).`);
     });
 
+    startKeepAlive();
     startFrameLoop();
+    statusTimer = setInterval(() => {
+      if (!sharing) return;
+      if (document.hidden) {
+        setMessage(
+          `Background streaming active — ${framesSent} frames sent. Do not close this tab.`
+        );
+      } else {
+        setMessage(
+          `Online as “${hostInfo.name}”. ${framesSent} frames sent. Connect from the other PC/phone.`
+        );
+      }
+    }, 3000);
+  }
+
+  function startKeepAlive() {
+    stopKeepAlive();
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      keepAliveAudio = new Ctx();
+      const osc = keepAliveAudio.createOscillator();
+      const gain = keepAliveAudio.createGain();
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(keepAliveAudio.destination);
+      osc.start();
+      keepAliveAudio._osc = osc;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function stopKeepAlive() {
+    if (!keepAliveAudio) return;
+    try {
+      keepAliveAudio._osc?.stop();
+      keepAliveAudio.close();
+    } catch {
+      /* ignore */
+    }
+    keepAliveAudio = null;
   }
 
   function startFrameLoop() {
     stopFrameLoop();
-    frameTimer = setInterval(sendFrame, 150);
+    // Web Workers are not heavily throttled when the tab is in the background,
+    // so viewers on another computer keep receiving frames.
+    const workerCode = `
+      let timer = setInterval(() => postMessage("tick"), 120);
+      onmessage = (e) => {
+        if (e.data === "stop") clearInterval(timer);
+      };
+    `;
+    const blob = new Blob([workerCode], { type: "application/javascript" });
+    tickWorker = new Worker(URL.createObjectURL(blob));
+    tickWorker.onmessage = () => {
+      sendFrame();
+    };
   }
 
   function stopFrameLoop() {
-    if (frameTimer) {
-      clearInterval(frameTimer);
-      frameTimer = null;
+    if (tickWorker) {
+      try {
+        tickWorker.postMessage("stop");
+        tickWorker.terminate();
+      } catch {
+        /* ignore */
+      }
+      tickWorker = null;
     }
   }
 
   function sendFrame() {
-    if (!sharing || !socket || sending) return;
+    if (!sharing || !socket || !socket.connected || busy) return;
     if (!captureVideo.videoWidth || !captureVideo.videoHeight) return;
 
-    const maxW = 960;
+    const maxW = 1024;
     const scale = Math.min(1, maxW / captureVideo.videoWidth);
     const w = Math.max(2, Math.round(captureVideo.videoWidth * scale));
     const h = Math.max(2, Math.round(captureVideo.videoHeight * scale));
@@ -156,22 +249,35 @@
       captureCanvas.height = h;
     }
 
-    captureCtx.drawImage(captureVideo, 0, 0, w, h);
-    // Base64 data URL works reliably on iPhone Safari (binary sockets often do not).
-    const dataUrl = captureCanvas.toDataURL("image/jpeg", 0.5);
-    sending = true;
-    socket.emit("host:frame", dataUrl, () => {
-      sending = false;
+    try {
+      captureCtx.drawImage(captureVideo, 0, 0, w, h);
+    } catch {
+      return;
+    }
+
+    busy = true;
+    let dataUrl;
+    try {
+      dataUrl = captureCanvas.toDataURL("image/jpeg", 0.45);
+    } catch {
+      busy = false;
+      return;
+    }
+
+    socket.timeout(2000).emit("host:frame", dataUrl, (err) => {
+      busy = false;
+      if (!err) framesSent += 1;
     });
-    // Fallback if server does not ack callbacks
-    setTimeout(() => {
-      sending = false;
-    }, 80);
   }
 
   function stopSharing() {
     sharing = false;
     stopFrameLoop();
+    stopKeepAlive();
+    if (statusTimer) {
+      clearInterval(statusTimer);
+      statusTimer = null;
+    }
     if (socket) {
       socket.disconnect();
       socket = null;

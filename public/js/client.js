@@ -203,13 +203,25 @@
     socket.on("frame", (payload) => {
       applyFrame(payload);
     });
+
+    // Ask host to know a viewer is waiting (already notified via client:joined).
+    setStageMessage("Connected — waiting for screen frames from the host…");
   }
 
   function applyFrame(payload) {
-    if (typeof payload === "string") {
-      image.src = payload.startsWith("data:")
+    if (typeof payload === "string" && payload.length > 32) {
+      // Assigning a new data URL each time; force decode for other PCs/Safari.
+      const next = payload.startsWith("data:")
         ? payload
         : `data:image/jpeg;base64,${payload}`;
+      if (image.src === next) {
+        // identical frame — still count as connected
+        connected = true;
+        clearTimeout(connectWatchdog);
+        hideStageOverlay();
+        return;
+      }
+      image.src = next;
       return;
     }
 

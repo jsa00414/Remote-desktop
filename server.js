@@ -506,12 +506,19 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("host:frame", (payload) => {
+  socket.on("host:frame", (payload, ack) => {
     const hostId = socket.data.hostId;
-    if (!hostId || socket.data.role !== "host") return;
-    if (!payload) return;
+    if (!hostId || socket.data.role !== "host") {
+      if (typeof ack === "function") ack({ ok: false });
+      return;
+    }
+    if (!payload) {
+      if (typeof ack === "function") ack({ ok: false });
+      return;
+    }
     lastRelayFrames.set(hostId, payload);
     io.to(`host:${hostId}`).emit("frame", payload);
+    if (typeof ack === "function") ack({ ok: true });
   });
 
   socket.on("client:auth", (payload, ack) => {
