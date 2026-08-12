@@ -1,0 +1,51 @@
+volumes:
+  etc_wireguard:
+
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:15
+    container_name: wg-easy
+    environment:
+      # HTTP admin UI (set false once behind HTTPS reverse proxy)
+      - INSECURE=${INSECURE:-true}
+      - PORT=${UI_PORT:-5001}
+      - HOST=0.0.0.0
+      # First-boot only — configures host/port + admin account
+      - INIT_ENABLED=${INIT_ENABLED:-true}
+      - INIT_USERNAME=${INIT_USERNAME:-admin}
+      - INIT_PASSWORD=${INIT_PASSWORD:-ChangeMe-WireGuard-5001}
+      - INIT_HOST=${WG_HOST:?Set WG_HOST in .env to your public IP or DNS}
+      - INIT_PORT=${WG_PORT:-5000}
+      - INIT_DNS=${INIT_DNS:-1.1.1.1,8.8.8.8}
+    networks:
+      wg:
+        ipv4_address: 10.42.42.42
+        ipv6_address: fdcc:ad94:bacf:61a3::2a
+    volumes:
+      - etc_wireguard:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
+    ports:
+      # Internet / WireGuard tunnel
+      - "${WG_PORT:-5000}:${WG_PORT:-5000}/udp"
+      # VPN controls website
+      - "${UI_PORT:-5001}:${UI_PORT:-5001}/tcp"
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.default.forwarding=1
+
+networks:
+  wg:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.42.42.0/24
+        - subnet: fdcc:ad94:bacf:61a3::/64

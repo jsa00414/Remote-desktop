@@ -1,0 +1,6 @@
+# Optional HTTPS front for the WireGuard controls website (port 5001).
+# Point DNS at this host, then run Caddy and set INSECURE=false in .env.
+
+vpn.example.com {
+  reverse_proxy 127.0.0.1:5001
+}
