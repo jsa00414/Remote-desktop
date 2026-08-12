@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
+const https = require("https");
 const crypto = require("crypto");
 const { spawn } = require("child_process");
 const express = require("express");
@@ -15,9 +16,25 @@ const FRAME_SCALE = process.env.FRAME_SCALE || "1280:-1";
 const SKIP_LOCAL_HOST = process.env.SKIP_LOCAL_HOST === "1";
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const HOSTS_FILE = path.join(DATA_DIR, "hosts.json");
+const TLS_CERT_FILE = process.env.TLS_CERT_FILE || "";
+const TLS_KEY_FILE = process.env.TLS_KEY_FILE || "";
 
 const app = express();
-const server = http.createServer(app);
+const useHttps =
+  TLS_CERT_FILE &&
+  TLS_KEY_FILE &&
+  fs.existsSync(TLS_CERT_FILE) &&
+  fs.existsSync(TLS_KEY_FILE);
+
+const server = useHttps
+  ? https.createServer(
+      {
+        cert: fs.readFileSync(TLS_CERT_FILE),
+        key: fs.readFileSync(TLS_KEY_FILE),
+      },
+      app
+    )
+  : http.createServer(app);
 const io = new Server(server, {
   cors: { origin: false },
   maxHttpBufferSize: 2e6,
@@ -585,9 +602,15 @@ async function main() {
   }
 
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Remote desktop on http://0.0.0.0:${PORT}`);
+    const proto = useHttps ? "https" : "http";
+    console.log(`Remote desktop on ${proto}://0.0.0.0:${PORT}`);
     console.log(`Admin password: ${ADMIN_PASSWORD}`);
     console.log(`Separate from True Mail — bind port ${PORT} only`);
+    if (!useHttps) {
+      console.log(
+        "WARNING: HTTP only — browsers block screen capture except on localhost. Use HTTPS."
+      );
+    }
   });
 }
 
