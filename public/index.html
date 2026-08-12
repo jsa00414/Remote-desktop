@@ -67,38 +67,6 @@
       </main>
     </div>
 
-    <div id="session-view" class="session-view" hidden>
-      <header class="session-bar">
-        <div class="session-identity">
-          <span class="live-dot" aria-hidden="true"></span>
-          <div>
-            <p class="session-brand">Remote Desktop</p>
-            <h2 id="session-host-name">Connected host</h2>
-          </div>
-        </div>
-        <div class="session-actions">
-          <button type="button" class="btn ghost" id="keyboard-btn" title="Keyboard">Keyboard</button>
-          <button type="button" class="btn ghost" id="fullscreen-btn">Fullscreen</button>
-          <button type="button" class="btn danger" id="disconnect-btn">Disconnect</button>
-        </div>
-      </header>
-      <div class="stage" id="stage" tabindex="0">
-        <canvas id="remote-canvas" hidden></canvas>
-        <video id="remote-video" autoplay playsinline muted hidden></video>
-        <div id="stage-overlay" class="stage-overlay">
-          <p id="stage-message">Connecting…</p>
-        </div>
-      </div>
-      <div id="osk" class="osk" hidden>
-        <div class="osk-row" data-keys='["Esc","Tab","Backspace"]'></div>
-        <div class="osk-row" data-keys='["1","2","3","4","5","6","7","8","9","0"]'></div>
-        <div class="osk-row" data-keys='["q","w","e","r","t","y","u","i","o","p"]'></div>
-        <div class="osk-row" data-keys='["a","s","d","f","g","h","j","k","l"]'></div>
-        <div class="osk-row" data-keys='["Shift","z","x","c","v","b","n","m"]'></div>
-        <div class="osk-row" data-keys='[",",".","/","Space","Enter"]'></div>
-      </div>
-    </div>
-
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/client.js"></script>
   </body>

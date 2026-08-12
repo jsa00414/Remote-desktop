@@ -7,7 +7,8 @@ Designed to run on the True Mail VPS as a **separate site** from `https://mail.t
 ## Features
 
 - Admin (`/admin`) — add/remove computers, set PIN, rotate setup codes (password `8112026`)
-- Devices (`/`) — pick an online computer and connect with its PIN
+- Devices (`/`) — pick an online computer and enter its PIN
+- Session (`/session`) — Chrome Remote Desktop–style control page after PIN (keyboard, touch/trackpad, send text, fullscreen)
 - Host agent (`/host`) — register a computer with its setup code and share the screen
 - Built-in “This server” host when a local display is available
 

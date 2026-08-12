@@ -267,6 +267,10 @@ app.get(["/host", "/host.html"], (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "host.html"));
 });
 
+app.get(["/session", "/session.html"], (_req, res) => {
+  res.sendFile(path.join(__dirname, "public", "session.html"));
+});
+
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api/") || req.path.startsWith("/socket.io")) {
     return next();
