@@ -13,6 +13,8 @@ const FRAME_FPS = Number(process.env.FRAME_FPS) || 8;
 const FRAME_QUALITY = Number(process.env.FRAME_QUALITY) || 5;
 const FRAME_SCALE = process.env.FRAME_SCALE || "1280:-1";
 const SKIP_LOCAL_HOST = process.env.SKIP_LOCAL_HOST === "1";
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
+const HOSTS_FILE = path.join(DATA_DIR, "hosts.json");
 
 const app = express();
 const server = http.createServer(app);
