@@ -106,14 +106,21 @@ function startCapture() {
     "pipe:1",
   ];
 
-  captureProc = spawn("ffmpeg", args, {
-    stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, DISPLAY },
-  });
+  try {
+    captureProc = spawn("ffmpeg", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, DISPLAY },
+    });
+  } catch (err) {
+    console.error("ffmpeg spawn failed:", err.message);
+    captureProc = null;
+    return;
+  }
 
   let buffer = Buffer.alloc(0);
   const SOI = Buffer.from([0xff, 0xd8]);
   const EOI = Buffer.from([0xff, 0xd9]);
+  let restarting = false;
 
   captureProc.stdout.on("data", (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
@@ -145,12 +152,19 @@ function startCapture() {
     if (text) console.error("[ffmpeg]", text);
   });
 
-  captureProc.on("exit", (code) => {
-    console.error(`ffmpeg exited (${code}); restarting in 1s`);
+  captureProc.on("error", (err) => {
+    console.error("ffmpeg error:", err.message);
     captureProc = null;
+  });
+
+  captureProc.on("exit", (code) => {
+    console.error(`ffmpeg exited (${code})`);
+    captureProc = null;
+    if (restarting) return;
+    restarting = true;
     setTimeout(() => {
       startCapture();
-    }, 1000);
+    }, 3000);
   });
 
   console.log(
