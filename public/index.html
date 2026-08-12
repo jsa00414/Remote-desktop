@@ -13,37 +13,49 @@
     <link rel="stylesheet" href="/css/styles.css" />
   </head>
   <body>
-    <div id="auth-view" class="auth-view">
+    <div id="home-view" class="home-view">
+      <div class="auth-atmosphere" aria-hidden="true"></div>
+      <main class="home-shell">
+        <header class="home-header">
+          <div>
+            <p class="brand">Remote Desktop</p>
+            <h1>Remote devices</h1>
+            <p class="auth-sub">Select a computer and enter its PIN to connect.</p>
+          </div>
+          <a class="btn ghost" href="/admin">Admin</a>
+        </header>
+        <section id="host-list" class="host-list" aria-live="polite"></section>
+        <p id="home-empty" class="home-empty" hidden>
+          No computers yet. Open <a href="/admin">Admin</a> to add a host.
+        </p>
+      </main>
+    </div>
+
+    <div id="pin-view" class="auth-view" hidden>
       <div class="auth-atmosphere" aria-hidden="true"></div>
       <main class="auth-panel">
         <p class="brand">Remote Desktop</p>
-        <h1>Connect to host</h1>
-        <p class="auth-sub">
-          Enter the access password to open the connected host session.
-        </p>
-        <form id="auth-form" class="auth-form" autocomplete="off">
+        <h1 id="pin-host-name">Enter PIN</h1>
+        <p class="auth-sub">Use the PIN set for this computer in Admin.</p>
+        <form id="pin-form" class="auth-form" autocomplete="off">
           <label class="field">
-            <span>Password</span>
+            <span>PIN</span>
             <input
-              id="password-input"
-              name="password"
+              id="pin-input"
               type="password"
               inputmode="numeric"
-              maxlength="32"
+              maxlength="12"
               required
               autofocus
-              placeholder="Access password"
+              placeholder="Access PIN"
             />
           </label>
-          <p id="auth-error" class="auth-error" hidden></p>
-          <button type="submit" class="btn primary" id="connect-btn">
-            Connect
-          </button>
+          <p id="pin-error" class="auth-error" hidden></p>
+          <div class="row-actions">
+            <button type="button" class="btn ghost" id="pin-back-btn">Back</button>
+            <button type="submit" class="btn primary" id="pin-connect-btn">Connect</button>
+          </div>
         </form>
-        <p class="host-hint">
-          Host status:
-          <span id="host-status-label" class="status-pill online">Online</span>
-        </p>
       </main>
     </div>
 
@@ -57,18 +69,15 @@
           </div>
         </div>
         <div class="session-actions">
-          <button type="button" class="btn ghost" id="fullscreen-btn" title="Fullscreen">
-            Fullscreen
-          </button>
-          <button type="button" class="btn danger" id="disconnect-btn">
-            Disconnect
-          </button>
+          <button type="button" class="btn ghost" id="fullscreen-btn">Fullscreen</button>
+          <button type="button" class="btn danger" id="disconnect-btn">Disconnect</button>
         </div>
       </header>
       <div class="stage" id="stage">
-        <canvas id="remote-canvas"></canvas>
+        <canvas id="remote-canvas" hidden></canvas>
+        <video id="remote-video" autoplay playsinline muted hidden></video>
         <div id="stage-overlay" class="stage-overlay">
-          <p id="stage-message">Connecting to host…</p>
+          <p id="stage-message">Connecting…</p>
         </div>
       </div>
     </div>

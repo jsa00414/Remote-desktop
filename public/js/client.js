@@ -1,88 +1,84 @@
 (() => {
-  const authView = document.getElementById("auth-view");
+  const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
+
+  const homeView = document.getElementById("home-view");
+  const pinView = document.getElementById("pin-view");
   const sessionView = document.getElementById("session-view");
-  const authForm = document.getElementById("auth-form");
-  const passwordInput = document.getElementById("password-input");
-  const authError = document.getElementById("auth-error");
-  const connectBtn = document.getElementById("connect-btn");
-  const hostStatusLabel = document.getElementById("host-status-label");
+  const hostList = document.getElementById("host-list");
+  const homeEmpty = document.getElementById("home-empty");
+  const pinForm = document.getElementById("pin-form");
+  const pinInput = document.getElementById("pin-input");
+  const pinHostName = document.getElementById("pin-host-name");
+  const pinError = document.getElementById("pin-error");
+  const pinBackBtn = document.getElementById("pin-back-btn");
+  const pinConnectBtn = document.getElementById("pin-connect-btn");
   const sessionHostName = document.getElementById("session-host-name");
   const canvas = document.getElementById("remote-canvas");
   const ctx = canvas.getContext("2d");
+  const video = document.getElementById("remote-video");
   const stage = document.getElementById("stage");
   const stageOverlay = document.getElementById("stage-overlay");
   const stageMessage = document.getElementById("stage-message");
   const disconnectBtn = document.getElementById("disconnect-btn");
   const fullscreenBtn = document.getElementById("fullscreen-btn");
 
+  let selectedHost = null;
   let socket = null;
+  let pc = null;
   let connected = false;
+  let mode = null;
   let frameUrl = null;
   let lastMoveSent = 0;
   const image = new Image();
 
-  refreshHostStatus();
-  setInterval(refreshHostStatus, 5000);
+  refreshHosts();
+  setInterval(refreshHosts, 4000);
 
-  authForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    authError.hidden = true;
-    connectBtn.disabled = true;
-    connectBtn.textContent = "Connecting…";
-
+  pinForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!selectedHost) return;
+    pinError.hidden = true;
+    pinConnectBtn.disabled = true;
+    pinConnectBtn.textContent = "Connecting…";
     try {
-      await startSession(passwordInput.value.trim());
+      await startSession(selectedHost.id, pinInput.value.trim());
     } catch (err) {
-      showAuthError(err.message || "Could not connect");
-      connectBtn.disabled = false;
-      connectBtn.textContent = "Connect";
+      pinError.hidden = false;
+      pinError.textContent = err.message || "Could not connect";
+      pinConnectBtn.disabled = false;
+      pinConnectBtn.textContent = "Connect";
     }
   });
 
+  pinBackBtn.addEventListener("click", () => showHome());
   disconnectBtn.addEventListener("click", () => {
     teardown();
-    showAuth();
+    showHome();
   });
-
   fullscreenBtn.addEventListener("click", async () => {
-    if (!document.fullscreenElement) {
-      await stage.requestFullscreen?.();
-    } else {
-      await document.exitFullscreen?.();
-    }
+    if (!document.fullscreenElement) await stage.requestFullscreen?.();
+    else await document.exitFullscreen?.();
   });
 
-  canvas.addEventListener("mousemove", (e) => sendPointer("mousemove", e));
-  canvas.addEventListener("mousedown", (e) => {
-    canvas.focus();
-    sendPointer("mousedown", e);
-  });
-  canvas.addEventListener("mouseup", (e) => sendPointer("mouseup", e));
-  canvas.addEventListener(
+  const pointerTarget = () => (mode === "webrtc" ? video : canvas);
+  stage.addEventListener("mousemove", (e) => sendPointer("mousemove", e));
+  stage.addEventListener("mousedown", (e) => sendPointer("mousedown", e));
+  stage.addEventListener("mouseup", (e) => sendPointer("mouseup", e));
+  stage.addEventListener(
     "wheel",
     (e) => {
       if (!connected || !socket) return;
       e.preventDefault();
-      socket.emit("input", {
-        type: "wheel",
-        deltaX: e.deltaX,
-        deltaY: e.deltaY,
-      });
+      socket.emit("input", { type: "wheel", deltaX: e.deltaX, deltaY: e.deltaY });
     },
     { passive: false }
   );
-  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-  canvas.tabIndex = 0;
+  stage.addEventListener("contextmenu", (e) => e.preventDefault());
 
   window.addEventListener("keydown", (e) => {
-    if (!connected || !socket) return;
-    if (authView.hidden === false) return;
+    if (!connected || !socket || !sessionView || sessionView.hidden) return;
     e.preventDefault();
-    socket.emit("input", {
-      type: "keydown",
-      key: e.key,
-      code: e.code,
-    });
+    socket.emit("input", { type: "keydown", key: e.key, code: e.code });
   });
 
   image.onload = () => {
@@ -97,24 +93,56 @@
     hideStageOverlay();
   };
 
-  async function refreshHostStatus() {
-    try {
-      const res = await fetch("/api/status");
-      const data = await res.json();
-      const online = !!data.hostOnline;
-      hostStatusLabel.textContent = online ? "Online" : "Offline";
-      hostStatusLabel.classList.toggle("online", online);
-      hostStatusLabel.classList.toggle("offline", !online);
-    } catch {
-      hostStatusLabel.textContent = "Unknown";
-      hostStatusLabel.classList.add("offline");
-      hostStatusLabel.classList.remove("online");
+  async function refreshHosts() {
+    if (!homeView || homeView.hidden === false) {
+      try {
+        const res = await fetch("/api/hosts");
+        const data = await res.json();
+        renderHosts(data.hosts || []);
+      } catch {
+        /* ignore */
+      }
     }
   }
 
-  async function startSession(password) {
-    teardown();
+  function renderHosts(hosts) {
+    hostList.innerHTML = "";
+    homeEmpty.hidden = hosts.length > 0;
+    for (const host of hosts) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "device-row";
+      btn.innerHTML = `
+        <span class="device-icon" aria-hidden="true"></span>
+        <span class="device-meta">
+          <strong>${escapeHtml(host.name)}</strong>
+          <span class="device-status ${host.online ? "online" : "offline"}">
+            ${host.online ? "Online" : "Offline"}
+          </span>
+        </span>
+        <span class="device-cta">${host.online ? "Connect" : "Offline"}</span>
+      `;
+      btn.disabled = !host.online;
+      btn.addEventListener("click", () => openPin(host));
+      hostList.appendChild(btn);
+    }
+  }
 
+  function openPin(host) {
+    selectedHost = host;
+    pinHostName.textContent = host.name;
+    pinInput.value = "";
+    pinError.hidden = true;
+    pinConnectBtn.disabled = false;
+    pinConnectBtn.textContent = "Connect";
+    homeView.hidden = true;
+    sessionView.hidden = true;
+    pinView.hidden = false;
+    pinInput.focus();
+  }
+
+  async function startSession(hostId, pin) {
+    teardown();
     socket = io({ transports: ["websocket", "polling"] });
 
     await new Promise((resolve, reject) => {
@@ -129,83 +157,107 @@
       });
     });
 
-    const authResult = await new Promise((resolve) => {
-      socket.emit("client:auth", { password }, resolve);
+    const auth = await new Promise((resolve) => {
+      socket.emit("client:auth", { hostId, pin }, resolve);
     });
-
-    if (!authResult?.ok) {
+    if (!auth?.ok) {
       socket.disconnect();
       socket = null;
-      throw new Error(authResult?.error || "Authentication failed");
+      throw new Error(auth?.error || "Authentication failed");
     }
 
-    sessionHostName.textContent = authResult.hostName || "Connected host";
+    mode = auth.mode;
+    sessionHostName.textContent = auth.host?.name || "Connected host";
     showSession();
     setStageMessage("Receiving host screen…");
 
-    socket.on("frame", (payload) => {
-      const bytes =
-        payload instanceof ArrayBuffer
-          ? new Uint8Array(payload)
-          : payload?.type === "Buffer"
-            ? new Uint8Array(payload.data)
-            : payload instanceof Uint8Array
-              ? payload
-              : null;
+    canvas.hidden = mode !== "local";
+    video.hidden = mode !== "webrtc";
 
-      if (!bytes) return;
-
-      if (frameUrl) URL.revokeObjectURL(frameUrl);
-      const blob = new Blob([bytes], { type: "image/jpeg" });
-      frameUrl = URL.createObjectURL(blob);
-      image.src = frameUrl;
+    socket.on("host:disconnected", () => {
+      teardown();
+      showHome();
     });
 
-    socket.on("disconnect", () => {
-      connected = false;
-      setStageMessage("Disconnected from host");
+    if (mode === "local") {
+      socket.on("frame", (payload) => {
+        const bytes = toBytes(payload);
+        if (!bytes) return;
+        if (frameUrl) URL.revokeObjectURL(frameUrl);
+        frameUrl = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
+        image.src = frameUrl;
+      });
+      return;
+    }
+
+    pc = new RTCPeerConnection({ iceServers });
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("signal", { to: auth.agentSocketId, data: event.candidate.toJSON() });
+      }
+    };
+    pc.ontrack = (event) => {
+      video.srcObject = event.streams[0];
+      connected = true;
+      hideStageOverlay();
+    };
+    pc.onconnectionstatechange = () => {
+      if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
+        setStageMessage("Connection lost");
+        connected = false;
+      }
+    };
+
+    socket.on("signal", async ({ from, data }) => {
+      if (!pc) return;
+      try {
+        if (data.type === "offer") {
+          await pc.setRemoteDescription(data);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.emit("signal", { to: from, data: pc.localDescription });
+        } else if (data.candidate) {
+          await pc.addIceCandidate(data);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+    socket.emit("signal", {
+      to: auth.agentSocketId,
+      data: { type: "request-offer" },
     });
   }
 
   function sendPointer(type, e) {
     if (!connected || !socket) return;
-    const rect = canvas.getBoundingClientRect();
+    const el = pointerTarget();
+    const rect = el.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     if (x < 0 || y < 0 || x > 1 || y > 1) return;
-
     if (type === "mousemove") {
       const now = performance.now();
       if (now - lastMoveSent < 40) return;
       lastMoveSent = now;
     }
+    socket.emit("input", { type, x, y, button: e.button });
+  }
 
-    socket.emit("input", {
-      type,
-      x,
-      y,
-      button: e.button,
-    });
+  function showHome() {
+    selectedHost = null;
+    pinView.hidden = true;
+    sessionView.hidden = true;
+    homeView.hidden = false;
+    refreshHosts();
   }
 
   function showSession() {
-    authView.hidden = true;
+    homeView.hidden = true;
+    pinView.hidden = true;
     sessionView.hidden = false;
-  }
-
-  function showAuth() {
-    sessionView.hidden = true;
-    authView.hidden = false;
-    connectBtn.disabled = false;
-    connectBtn.textContent = "Connect";
-    refreshHostStatus();
-  }
-
-  function showAuthError(message) {
-    authError.hidden = false;
-    authError.textContent = message;
   }
 
   function setStageMessage(message) {
@@ -219,14 +271,37 @@
 
   function teardown() {
     connected = false;
+    mode = null;
     if (socket) {
       socket.disconnect();
       socket = null;
+    }
+    if (pc) {
+      pc.close();
+      pc = null;
+    }
+    if (video.srcObject) {
+      video.srcObject.getTracks().forEach((t) => t.stop());
+      video.srcObject = null;
     }
     if (frameUrl) {
       URL.revokeObjectURL(frameUrl);
       frameUrl = null;
     }
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function toBytes(payload) {
+    if (payload instanceof ArrayBuffer) return new Uint8Array(payload);
+    if (payload?.type === "Buffer") return new Uint8Array(payload.data);
+    if (payload instanceof Uint8Array) return payload;
+    return null;
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
   }
 })();

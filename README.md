@@ -1,13 +1,15 @@
 # Remote Desktop
 
-Chrome Remote Desktop–style **connected host** session, run by `server.js`.
+Chrome Remote Desktop–style app with an **admin page to add host computers**, served on **port 5000** by `server.js`.
+
+Designed to run on the True Mail VPS as a **separate site** from `https://mail.truemailor.com/mail` (different port / hostname).
 
 ## Features
 
-- Password gate: `8112026`
-- Live host screen stream from the server display (`ffmpeg` + Socket.IO)
-- Mouse and keyboard control (`xdotool`)
-- Connected-host session UI (toolbar, fullscreen, disconnect)
+- Admin (`/admin`) — add/remove computers, set PIN, rotate setup codes (password `8112026`)
+- Devices (`/`) — pick an online computer and connect with its PIN
+- Host agent (`/host`) — register a computer with its setup code and share the screen
+- Built-in “This server” host when a local display is available
 
 ## Run
 
@@ -16,23 +18,29 @@ npm install
 npm start
 ```
 
-Open http://localhost:5000, enter password `8112026`, and use the connected host.
+- Devices: http://localhost:5000  
+- Admin: http://localhost:5000/admin  
+- Host share: http://localhost:5000/host  
 
-## Deploy to VPS
+## Deploy on True Mail VPS (separate from True Mail)
+
+Keep True Mail on 443/`/mail`. Run this app on **port 5000** (or put Caddy in front on e.g. `remote.truemailor.com`).
 
 ```bash
-export VPS_HOST=your.vps.ip
+export VPS_HOST=74.208.54.132
 export VPS_USER=root
-# either:
-export VPS_SSH_PRIVATE_KEY="$(cat ~/.ssh/id_rsa)"
-# or:
-# export VPS_SSH_PASSWORD='…'
+export VPS_SSH_PRIVATE_KEY="$(cat ~/.ssh/id_rsa)"   # or VPS_SSH_PASSWORD
 export VPS_DEPLOY_PATH=/opt/remote-desktop
 export VPS_APP_PORT=5000
-
-chmod +x scripts/deploy-vps.sh
 ./scripts/deploy-vps.sh
 ```
 
-Then open `http://YOUR_VPS_IP:5000` and connect with password `8112026`.
+Optional Caddy site (separate hostname):
 
+```
+remote.truemailor.com {
+  reverse_proxy 127.0.0.1:5000
+}
+```
+
+Then open `http://VPS_IP:5000` or `https://remote.truemailor.com`.
