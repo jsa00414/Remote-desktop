@@ -7,6 +7,16 @@ WireGuard VPN with a web control panel ([wg-easy](https://github.com/wg-easy/wg-
 | **WireGuard** | **UDP 5000** | Internet / VPN tunnel |
 | **Controls website** | **TCP 5001** | Admin UI — clients, QR codes, configs |
 
+## Public controls URL
+
+On the IONOS VPS, Caddy serves the admin UI at:
+
+**https://vpn.vpstruelord.com/**
+
+(proxies to WireGuard Easy on TCP 5001)
+
+DNS: Cloudflare A record `vpn` → `74.208.54.132` (proxied). No Origin Rule to port 5001 is required — Caddy terminates HTTPS on 443.
+
 ## Quick start on the VPS
 
 ```bash
