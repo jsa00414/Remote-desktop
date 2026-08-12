@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Share host · Remote Desktop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="host-body">
+    <div class="auth-atmosphere host-atmosphere" aria-hidden="true"></div>
+    <main class="host-panel">
+      <p class="brand">Remote Desktop</p>
+      <h1>Share this computer</h1>
+      <p class="auth-sub">
+        Enter the setup code from Admin, then share your screen.
+        For remote keyboard/mouse, also run the local input agent on this PC
+        (<code>node local-input-agent.js</code> from
+        <a href="/agent/local-input-agent.js" download>download</a>).
+        Keep this tab open. Use <code>https://74.208.54.132:5000/host</code>.
+      </p>
+      <p id="agent-status" class="host-message">Checking local input agent…</p>
+
+      <label class="field">
+        <span>Setup code</span>
+        <input id="setup-code" type="text" maxlength="16" placeholder="XXXXXXXXXX" autocomplete="off" />
+      </label>
+
+      <div class="host-actions">
+        <button type="button" class="btn primary" id="share-btn">Start sharing</button>
+        <button type="button" class="btn ghost" id="stop-btn" hidden>Stop sharing</button>
+      </div>
+
+      <p id="host-message" class="host-message">Waiting…</p>
+      <div class="preview-wrap" id="preview-wrap" hidden>
+        <video id="preview" autoplay muted playsinline></video>
+      </div>
+      <p class="host-hint"><a href="/">← Devices</a> · <a href="/admin">Admin</a></p>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/host.js"></script>
+  </body>
+</html>

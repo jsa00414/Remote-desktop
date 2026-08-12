@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#0b1220" />
+    <title>Remote Desktop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <div id="home-view" class="home-view">
+      <div class="auth-atmosphere" aria-hidden="true"></div>
+      <main class="home-shell">
+        <header class="home-header">
+          <div>
+            <p class="brand">Remote Desktop</p>
+            <h1>Remote devices</h1>
+            <p class="auth-sub">Select a computer and enter its PIN to connect.</p>
+          </div>
+          <a class="btn ghost" href="/admin">Admin</a>
+        </header>
+        <section id="host-list" class="host-list" aria-live="polite"></section>
+        <p id="home-error" class="auth-error" hidden></p>
+        <p id="home-empty" class="home-empty" hidden>
+          No computers yet. Open <a href="/admin">Admin</a> to add a host.
+        </p>
+        <p class="iphone-tip">
+          iPhone: open <code>https://74.208.54.132:5000</code>, tap <strong>Show Details → visit</strong>,
+          then connect when a computer is Online.
+        </p>
+      </main>
+    </div>
+
+    <div id="pin-view" class="auth-view" hidden>
+      <div class="auth-atmosphere" aria-hidden="true"></div>
+      <main class="auth-panel">
+        <p class="brand">Remote Desktop</p>
+        <h1 id="pin-host-name">Enter PIN</h1>
+        <p class="auth-sub">Use the PIN set for this computer in Admin.</p>
+        <form id="pin-form" class="auth-form" autocomplete="off">
+          <label class="field">
+            <span>PIN</span>
+            <input
+              id="pin-input"
+              type="password"
+              inputmode="numeric"
+              maxlength="12"
+              required
+              autofocus
+              placeholder="Access PIN"
+            />
+          </label>
+          <p id="pin-error" class="auth-error" hidden></p>
+          <div class="row-actions">
+            <button type="button" class="btn ghost" id="pin-back-btn">Back</button>
+            <button type="submit" class="btn primary" id="pin-connect-btn">Connect</button>
+          </div>
+        </form>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/client.js"></script>
+  </body>
+</html>
