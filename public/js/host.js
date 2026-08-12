@@ -34,11 +34,18 @@
       });
     } catch (err) {
       shareBtn.disabled = false;
-      setMessage(
-        err.name === "NotAllowedError"
-          ? "Screen share permission denied."
-          : "Could not start screen capture."
-      );
+      const insecure = !window.isSecureContext;
+      if (insecure) {
+        setMessage(
+          "Screen capture needs HTTPS. Open https://74.208.54.132:5000/host (accept the certificate warning), then try again."
+        );
+      } else if (err.name === "NotAllowedError") {
+        setMessage("Screen share permission denied. Click Allow in the browser prompt.");
+      } else if (!navigator.mediaDevices?.getDisplayMedia) {
+        setMessage("This browser does not support screen sharing. Use Chrome or Edge on desktop.");
+      } else {
+        setMessage(`Could not start screen capture (${err.name || "error"}).`);
+      }
       return;
     }
 
