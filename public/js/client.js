@@ -176,6 +176,12 @@
     const y = (e.clientY - rect.top) / rect.height;
     if (x < 0 || y < 0 || x > 1 || y > 1) return;
 
+    if (type === "mousemove") {
+      const now = performance.now();
+      if (now - lastMoveSent < 40) return;
+      lastMoveSent = now;
+    }
+
     socket.emit("input", {
       type,
       x,
