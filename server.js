@@ -487,16 +487,24 @@ io.on("connection", (socket) => {
       io.to(prev.socketId).emit("host:replaced");
     }
 
-    onlineHosts.set(host.id, { mode: "webrtc", socketId: socket.id });
+    onlineHosts.set(host.id, { mode: "relay", socketId: socket.id });
     host.lastSeenAt = new Date().toISOString();
     saveHosts();
     socket.data.hostId = host.id;
+    socket.data.role = "host";
     socket.join(`agent:${host.id}`);
     io.emit("hosts:updated");
 
     if (typeof ack === "function") {
       ack({ ok: true, host: publicHost(host) });
     }
+  });
+
+  socket.on("host:frame", (payload) => {
+    const hostId = socket.data.hostId;
+    if (!hostId || socket.data.role !== "host") return;
+    if (!payload) return;
+    io.to(`host:${hostId}`).emit("frame", payload);
   });
 
   socket.on("client:auth", (payload, ack) => {
@@ -537,7 +545,7 @@ io.on("connection", (socket) => {
       socket.emit("frame", lastFrame);
     }
 
-    if (runtime.mode === "webrtc" && runtime.socketId) {
+    if (runtime.socketId) {
       io.to(runtime.socketId).emit("client:joined", { clientId: socket.id });
     }
   });

@@ -1,6 +1,4 @@
 (() => {
-  const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
-
   const homeView = document.getElementById("home-view");
   const pinView = document.getElementById("pin-view");
   const sessionView = document.getElementById("session-view");
@@ -24,11 +22,10 @@
 
   let selectedHost = null;
   let socket = null;
-  let pc = null;
   let connected = false;
-  let mode = null;
   let frameUrl = null;
   let lastMoveSent = 0;
+  let connectWatchdog = null;
   const image = new Image();
 
   refreshHosts();
@@ -60,7 +57,6 @@
     else await document.exitFullscreen?.();
   });
 
-  const pointerTarget = () => (mode === "webrtc" ? video : canvas);
   stage.addEventListener("mousemove", (e) => sendPointer("mousemove", e));
   stage.addEventListener("mousedown", (e) => sendPointer("mousedown", e));
   stage.addEventListener("mouseup", (e) => sendPointer("mouseup", e));
@@ -76,7 +72,7 @@
   stage.addEventListener("contextmenu", (e) => e.preventDefault());
 
   window.addEventListener("keydown", (e) => {
-    if (!connected || !socket || !sessionView || sessionView.hidden) return;
+    if (!connected || !socket || sessionView.hidden) return;
     e.preventDefault();
     socket.emit("input", { type: "keydown", key: e.key, code: e.code });
   });
@@ -90,11 +86,12 @@
     if (frameUrl) URL.revokeObjectURL(frameUrl);
     frameUrl = null;
     connected = true;
+    clearTimeout(connectWatchdog);
     hideStageOverlay();
   };
 
   async function refreshHosts() {
-    if (!homeView || homeView.hidden === false) {
+    if (!homeView.hidden) {
       try {
         const res = await fetch("/api/hosts");
         const data = await res.json();
@@ -166,74 +163,37 @@
       throw new Error(auth?.error || "Authentication failed");
     }
 
-    mode = auth.mode;
     sessionHostName.textContent = auth.host?.name || "Connected host";
     showSession();
-    setStageMessage("Receiving host screen…");
+    setStageMessage("Waiting for screen… Keep the host page sharing.");
+    canvas.hidden = false;
+    video.hidden = true;
 
-    canvas.hidden = mode !== "local";
-    video.hidden = mode !== "webrtc";
+    connectWatchdog = setTimeout(() => {
+      if (!connected) {
+        setStageMessage(
+          "Still waiting for frames. On the host PC, confirm sharing is active at /host."
+        );
+      }
+    }, 8000);
 
     socket.on("host:disconnected", () => {
       teardown();
       showHome();
     });
 
-    if (mode === "local") {
-      socket.on("frame", (payload) => {
-        const bytes = toBytes(payload);
-        if (!bytes) return;
-        if (frameUrl) URL.revokeObjectURL(frameUrl);
-        frameUrl = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
-        image.src = frameUrl;
-      });
-      return;
-    }
-
-    pc = new RTCPeerConnection({ iceServers });
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit("signal", { to: auth.agentSocketId, data: event.candidate.toJSON() });
-      }
-    };
-    pc.ontrack = (event) => {
-      video.srcObject = event.streams[0];
-      connected = true;
-      hideStageOverlay();
-    };
-    pc.onconnectionstatechange = () => {
-      if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
-        setStageMessage("Connection lost");
-        connected = false;
-      }
-    };
-
-    socket.on("signal", async ({ from, data }) => {
-      if (!pc) return;
-      try {
-        if (data.type === "offer") {
-          await pc.setRemoteDescription(data);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          socket.emit("signal", { to: from, data: pc.localDescription });
-        } else if (data.candidate) {
-          await pc.addIceCandidate(data);
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    });
-
-    socket.emit("signal", {
-      to: auth.agentSocketId,
-      data: { type: "request-offer" },
+    socket.on("frame", (payload) => {
+      const bytes = toBytes(payload);
+      if (!bytes) return;
+      if (frameUrl) URL.revokeObjectURL(frameUrl);
+      frameUrl = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
+      image.src = frameUrl;
     });
   }
 
   function sendPointer(type, e) {
     if (!connected || !socket) return;
-    const el = pointerTarget();
-    const rect = el.getBoundingClientRect();
+    const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
@@ -271,18 +231,10 @@
 
   function teardown() {
     connected = false;
-    mode = null;
+    clearTimeout(connectWatchdog);
     if (socket) {
       socket.disconnect();
       socket = null;
-    }
-    if (pc) {
-      pc.close();
-      pc = null;
-    }
-    if (video.srcObject) {
-      video.srcObject.getTracks().forEach((t) => t.stop());
-      video.srcObject = null;
     }
     if (frameUrl) {
       URL.revokeObjectURL(frameUrl);

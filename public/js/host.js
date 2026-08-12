@@ -1,6 +1,4 @@
 (() => {
-  const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
-
   const shareBtn = document.getElementById("share-btn");
   const stopBtn = document.getElementById("stop-btn");
   const setupCodeInput = document.getElementById("setup-code");
@@ -9,10 +7,19 @@
   const preview = document.getElementById("preview");
 
   let displayStream = null;
-  const peers = new Map();
   let socket = null;
   let sharing = false;
   let hostInfo = null;
+  let frameTimer = null;
+  let sending = false;
+
+  const captureVideo = document.createElement("video");
+  captureVideo.muted = true;
+  captureVideo.playsInline = true;
+  captureVideo.autoplay = true;
+
+  const captureCanvas = document.createElement("canvas");
+  const captureCtx = captureCanvas.getContext("2d", { alpha: false });
 
   shareBtn.addEventListener("click", startSharing);
   stopBtn.addEventListener("click", stopSharing);
@@ -29,7 +36,11 @@
 
     try {
       displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 30, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: {
+          frameRate: 10,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
         audio: false,
       });
     } catch (err) {
@@ -52,8 +63,13 @@
     displayStream.getVideoTracks()[0].addEventListener("ended", () => stopSharing());
     preview.srcObject = displayStream;
     previewWrap.hidden = false;
+    captureVideo.srcObject = displayStream;
+    await captureVideo.play().catch(() => {});
 
-    socket = io({ transports: ["websocket", "polling"] });
+    socket = io({
+      transports: ["websocket", "polling"],
+      maxHttpBufferSize: 2e6,
+    });
 
     try {
       await new Promise((resolve, reject) => {
@@ -94,7 +110,7 @@
     shareBtn.hidden = true;
     stopBtn.hidden = false;
     setupCodeInput.disabled = true;
-    setMessage(`Online as “${hostInfo.name}”. Waiting for clients…`);
+    setMessage(`Online as “${hostInfo.name}”. Waiting for viewers…`);
 
     socket.on("host:replaced", () => {
       setMessage("Another session replaced this host.");
@@ -105,58 +121,62 @@
       stopSharing();
     });
 
-    socket.on("client:joined", async ({ clientId }) => {
-      await createOfferForClient(clientId);
+    socket.on("client:joined", () => {
+      setMessage("Viewer connected — streaming.");
     });
 
-    socket.on("signal", async ({ from, data }) => {
-      if (!sharing || !displayStream) return;
-      try {
-        if (data?.type === "request-offer") {
-          await createOfferForClient(from);
-          return;
-        }
-        const pc = peers.get(from);
-        if (!pc) return;
-        if (data.type === "answer") await pc.setRemoteDescription(data);
-        else if (data.candidate) await pc.addIceCandidate(data);
-      } catch (err) {
-        console.error(err);
-      }
-    });
+    startFrameLoop();
   }
 
-  async function createOfferForClient(clientId) {
-    closePeer(clientId);
-    const pc = new RTCPeerConnection({ iceServers });
-    peers.set(clientId, pc);
-    displayStream.getTracks().forEach((track) => pc.addTrack(track, displayStream));
+  function startFrameLoop() {
+    stopFrameLoop();
+    frameTimer = setInterval(sendFrame, 120);
+  }
 
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit("signal", { to: clientId, data: event.candidate.toJSON() });
-      }
-    };
-    pc.onconnectionstatechange = () => {
-      if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
-        closePeer(clientId);
-        if (sharing) setMessage(`Online as “${hostInfo?.name || "host"}”. Waiting for clients…`);
-      } else if (pc.connectionState === "connected") {
-        setMessage("Client connected — streaming.");
-      }
-    };
+  function stopFrameLoop() {
+    if (frameTimer) {
+      clearInterval(frameTimer);
+      frameTimer = null;
+    }
+  }
 
-    const offer = await pc.createOffer({
-      offerToReceiveAudio: false,
-      offerToReceiveVideo: false,
-    });
-    await pc.setLocalDescription(offer);
-    socket.emit("signal", { to: clientId, data: pc.localDescription });
+  function sendFrame() {
+    if (!sharing || !socket || sending) return;
+    if (!captureVideo.videoWidth || !captureVideo.videoHeight) return;
+
+    const maxW = 1280;
+    const scale = Math.min(1, maxW / captureVideo.videoWidth);
+    const w = Math.max(2, Math.round(captureVideo.videoWidth * scale));
+    const h = Math.max(2, Math.round(captureVideo.videoHeight * scale));
+
+    if (captureCanvas.width !== w || captureCanvas.height !== h) {
+      captureCanvas.width = w;
+      captureCanvas.height = h;
+    }
+
+    captureCtx.drawImage(captureVideo, 0, 0, w, h);
+    sending = true;
+    captureCanvas.toBlob(
+      (blob) => {
+        if (!blob || !sharing || !socket) {
+          sending = false;
+          return;
+        }
+        blob.arrayBuffer().then((buf) => {
+          socket.emit("host:frame", buf);
+          sending = false;
+        }).catch(() => {
+          sending = false;
+        });
+      },
+      "image/jpeg",
+      0.55
+    );
   }
 
   function stopSharing() {
     sharing = false;
-    for (const id of [...peers.keys()]) closePeer(id);
+    stopFrameLoop();
     if (socket) {
       socket.disconnect();
       socket = null;
@@ -174,15 +194,9 @@
       displayStream.getTracks().forEach((t) => t.stop());
       displayStream = null;
     }
+    captureVideo.srcObject = null;
     preview.srcObject = null;
     previewWrap.hidden = true;
-  }
-
-  function closePeer(id) {
-    const pc = peers.get(id);
-    if (!pc) return;
-    pc.close();
-    peers.delete(id);
   }
 
   function setMessage(text) {
