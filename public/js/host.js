@@ -3,9 +3,11 @@
   const stopBtn = document.getElementById("stop-btn");
   const setupCodeInput = document.getElementById("setup-code");
   const hostMessage = document.getElementById("host-message");
+  const agentStatus = document.getElementById("agent-status");
   const previewWrap = document.getElementById("preview-wrap");
   const preview = document.getElementById("preview");
 
+  const AGENT_URL = "http://127.0.0.1:19780";
   let displayStream = null;
   let socket = null;
   let sharing = false;
@@ -15,6 +17,9 @@
   let tickWorker = null;
   let keepAliveAudio = null;
   let statusTimer = null;
+  let agentOk = false;
+  let screenWidth = 1920;
+  let screenHeight = 1080;
 
   const captureVideo = document.createElement("video");
   captureVideo.muted = true;
@@ -31,6 +36,8 @@
 
   shareBtn.addEventListener("click", startSharing);
   stopBtn.addEventListener("click", stopSharing);
+  checkAgent();
+  setInterval(checkAgent, 4000);
 
   document.addEventListener("visibilitychange", () => {
     if (!sharing) return;
@@ -81,6 +88,9 @@
     }
 
     displayStream.getVideoTracks()[0].addEventListener("ended", () => stopSharing());
+    const trackSettings = displayStream.getVideoTracks()[0].getSettings?.() || {};
+    screenWidth = trackSettings.width || screenWidth;
+    screenHeight = trackSettings.height || screenHeight;
     preview.srcObject = displayStream;
     previewWrap.hidden = false;
     captureVideo.srcObject = displayStream;
@@ -159,6 +169,9 @@
     });
     socket.on("client:joined", () => {
       setMessage(`Viewer connected — streaming (${framesSent} frames sent so far).`);
+    });
+    socket.on("input", (event) => {
+      forwardInput(event);
     });
 
     startKeepAlive();
@@ -302,5 +315,41 @@
 
   function setMessage(text) {
     hostMessage.textContent = text;
+  }
+
+  async function checkAgent() {
+    if (!agentStatus) return;
+    try {
+      const res = await fetch(`${AGENT_URL}/health`, { cache: "no-store" });
+      const data = await res.json();
+      agentOk = !!data?.ok;
+      agentStatus.textContent = agentOk
+        ? `Input agent online (${data.platform}). Keyboard/mouse control enabled.`
+        : "Input agent not running — keyboard/mouse will not control this PC.";
+      agentStatus.style.color = agentOk ? "#9cf0c5" : "";
+    } catch {
+      agentOk = false;
+      agentStatus.textContent =
+        "Input agent not running. Download local-input-agent.js and run: node local-input-agent.js";
+      agentStatus.style.color = "";
+    }
+  }
+
+  function forwardInput(event) {
+    if (!event) return;
+    const payload = {
+      ...event,
+      screenWidth,
+      screenHeight,
+    };
+    fetch(`${AGENT_URL}/input`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      mode: "cors",
+      keepalive: true,
+    }).catch(() => {
+      agentOk = false;
+    });
   }
 })();

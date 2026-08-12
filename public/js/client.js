@@ -20,12 +20,16 @@
   const stageMessage = document.getElementById("stage-message");
   const disconnectBtn = document.getElementById("disconnect-btn");
   const fullscreenBtn = document.getElementById("fullscreen-btn");
+  const keyboardBtn = document.getElementById("keyboard-btn");
+  const osk = document.getElementById("osk");
 
   let selectedHost = null;
   let socket = null;
   let connected = false;
   let lastMoveSent = 0;
   let connectWatchdog = null;
+  let shiftOn = false;
+  const pressed = new Set();
   const image = new Image();
   image.decoding = "async";
 
@@ -74,10 +78,30 @@
   });
 
   bindPointer(stage);
+  buildOsk();
+  keyboardBtn?.addEventListener("click", () => {
+    if (!osk) return;
+    osk.hidden = !osk.hidden;
+    if (!osk.hidden) stage.focus();
+  });
+
   window.addEventListener("keydown", (e) => {
     if (!connected || !socket || sessionView.hidden) return;
+    if (e.target && ["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
     e.preventDefault();
-    socket.emit("input", { type: "keydown", key: e.key, code: e.code });
+    if (pressed.has(e.code)) return;
+    pressed.add(e.code);
+    sendKey("keydown", e.key, e.code);
+  });
+  window.addEventListener("keyup", (e) => {
+    if (!connected || !socket || sessionView.hidden) return;
+    if (e.target && ["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+    e.preventDefault();
+    pressed.delete(e.code);
+    sendKey("keyup", e.key, e.code);
+  });
+  window.addEventListener("blur", () => {
+    pressed.clear();
   });
 
   image.onload = () => {
@@ -183,9 +207,11 @@
 
     sessionHostName.textContent = auth.host?.name || "Connected host";
     showSession();
-    setStageMessage("Waiting for screen…");
+    setStageMessage("Connected — waiting for screen frames from the host…");
     canvas.hidden = false;
     video.hidden = true;
+    // Focus stage so physical keyboard is captured immediately.
+    setTimeout(() => stage.focus(), 50);
 
     connectWatchdog = setTimeout(() => {
       if (!connected) {
@@ -322,11 +348,54 @@
     );
   }
 
+  function sendKey(type, key, code) {
+    if (!connected || !socket) return;
+    socket.emit("input", { type, key, code });
+  }
+
+  function buildOsk() {
+    if (!osk) return;
+    osk.querySelectorAll(".osk-row").forEach((row) => {
+      let keys = [];
+      try {
+        keys = JSON.parse(row.getAttribute("data-keys") || "[]");
+      } catch {
+        keys = [];
+      }
+      row.innerHTML = "";
+      keys.forEach((label) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "osk-key";
+        if (["Space", "Enter", "Backspace", "Shift", "Tab", "Esc"].includes(label)) {
+          btn.classList.add("wide");
+        }
+        btn.textContent = label === "Space" ? "␣" : label;
+        btn.addEventListener("click", () => {
+          if (label === "Shift") {
+            shiftOn = !shiftOn;
+            btn.classList.toggle("active", shiftOn);
+            return;
+          }
+          let key = label;
+          if (label === "Space") key = " ";
+          if (label === "Esc") key = "Escape";
+          if (label.length === 1) key = shiftOn ? label.toUpperCase() : label.toLowerCase();
+          sendKey("keydown", key, key);
+          sendKey("keyup", key, key);
+          stage.focus();
+        });
+        row.appendChild(btn);
+      });
+    });
+  }
+
   function showHome() {
     selectedHost = null;
     pinView.hidden = true;
     sessionView.hidden = true;
     homeView.hidden = false;
+    if (osk) osk.hidden = true;
     refreshHosts();
   }
 

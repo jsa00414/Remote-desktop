@@ -276,7 +276,7 @@ h1 {
   min-height: 100dvh;
   height: 100dvh;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto 1fr auto;
   background:
     linear-gradient(180deg, #0a121f 0%, #101b2c 100%);
   overflow: hidden;
@@ -408,6 +408,51 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
+}
+
+.osk {
+  border-top: 1px solid var(--line);
+  background: rgba(8, 14, 24, 0.96);
+  padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+  display: grid;
+  gap: 6px;
+}
+
+.osk[hidden] {
+  display: none !important;
+}
+
+.osk-row {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.osk-key {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  border-radius: 8px;
+  min-width: 32px;
+  min-height: 40px;
+  padding: 8px 10px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.osk-key.wide {
+  min-width: 64px;
+}
+
+.osk-key.active {
+  background: rgba(47, 158, 239, 0.35);
+  border-color: rgba(47, 158, 239, 0.7);
+}
+
+#stage:focus {
+  outline: none;
 }
 
 @media (max-width: 640px) {

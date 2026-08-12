@@ -427,6 +427,9 @@ async function handleLocalInput(event) {
       if (key) await runXdotool(["key", key]);
       break;
     }
+    case "keyup":
+      // xdotool "key" already does a full press; ignore keyup for local mode.
+      break;
     default:
       break;
   }
