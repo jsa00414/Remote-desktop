@@ -16,6 +16,8 @@
   const captureVideo = document.createElement("video");
   captureVideo.muted = true;
   captureVideo.playsInline = true;
+  captureVideo.setAttribute("playsinline", "true");
+  captureVideo.setAttribute("webkit-playsinline", "true");
   captureVideo.autoplay = true;
 
   const captureCanvas = document.createElement("canvas");
@@ -37,7 +39,7 @@
     try {
       displayStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          frameRate: 10,
+          frameRate: 8,
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -53,7 +55,7 @@
       } else if (err.name === "NotAllowedError") {
         setMessage("Screen share permission denied. Click Allow in the browser prompt.");
       } else if (!navigator.mediaDevices?.getDisplayMedia) {
-        setMessage("This browser does not support screen sharing. Use Chrome or Edge on desktop.");
+        setMessage("This browser does not support screen sharing. Use Chrome or Edge on a computer to share.");
       } else {
         setMessage(`Could not start screen capture (${err.name || "error"}).`);
       }
@@ -68,19 +70,20 @@
 
     socket = io({
       transports: ["websocket", "polling"],
-      maxHttpBufferSize: 2e6,
+      upgrade: true,
+      rememberUpgrade: true,
     });
 
     try {
       await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("timeout")), 8000);
+        const timer = setTimeout(() => reject(new Error("timeout")), 10000);
         socket.once("connect", () => {
           clearTimeout(timer);
           resolve();
         });
-        socket.once("connect_error", () => {
+        socket.once("connect_error", (err) => {
           clearTimeout(timer);
-          reject(new Error("connect_error"));
+          reject(err || new Error("connect_error"));
         });
       });
     } catch {
@@ -110,7 +113,7 @@
     shareBtn.hidden = true;
     stopBtn.hidden = false;
     setupCodeInput.disabled = true;
-    setMessage(`Online as “${hostInfo.name}”. Waiting for viewers…`);
+    setMessage(`Online as “${hostInfo.name}”. Open the site on iPhone to view.`);
 
     socket.on("host:replaced", () => {
       setMessage("Another session replaced this host.");
@@ -120,9 +123,8 @@
       setMessage("This host was removed in Admin.");
       stopSharing();
     });
-
     socket.on("client:joined", () => {
-      setMessage("Viewer connected — streaming.");
+      setMessage("Viewer connected — streaming to phone/computer.");
     });
 
     startFrameLoop();
@@ -130,7 +132,7 @@
 
   function startFrameLoop() {
     stopFrameLoop();
-    frameTimer = setInterval(sendFrame, 120);
+    frameTimer = setInterval(sendFrame, 150);
   }
 
   function stopFrameLoop() {
@@ -144,7 +146,7 @@
     if (!sharing || !socket || sending) return;
     if (!captureVideo.videoWidth || !captureVideo.videoHeight) return;
 
-    const maxW = 1280;
+    const maxW = 960;
     const scale = Math.min(1, maxW / captureVideo.videoWidth);
     const w = Math.max(2, Math.round(captureVideo.videoWidth * scale));
     const h = Math.max(2, Math.round(captureVideo.videoHeight * scale));
@@ -155,23 +157,16 @@
     }
 
     captureCtx.drawImage(captureVideo, 0, 0, w, h);
+    // Base64 data URL works reliably on iPhone Safari (binary sockets often do not).
+    const dataUrl = captureCanvas.toDataURL("image/jpeg", 0.5);
     sending = true;
-    captureCanvas.toBlob(
-      (blob) => {
-        if (!blob || !sharing || !socket) {
-          sending = false;
-          return;
-        }
-        blob.arrayBuffer().then((buf) => {
-          socket.emit("host:frame", buf);
-          sending = false;
-        }).catch(() => {
-          sending = false;
-        });
-      },
-      "image/jpeg",
-      0.55
-    );
+    socket.emit("host:frame", dataUrl, () => {
+      sending = false;
+    });
+    // Fallback if server does not ack callbacks
+    setTimeout(() => {
+      sending = false;
+    }, 80);
   }
 
   function stopSharing() {

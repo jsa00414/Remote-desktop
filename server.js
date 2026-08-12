@@ -55,6 +55,8 @@ const authedClients = new Map();
 /** admin sessions */
 const adminTokens = new Set();
 
+/** last relayed frame per hostId (data URL or buffer) */
+const lastRelayFrames = new Map();
 let captureProc = null;
 let displaySize = { width: 1280, height: 720 };
 let lastFrame = null;
@@ -351,7 +353,11 @@ function startCapture() {
       const frame = buffer.subarray(0, end + 2);
       buffer = buffer.subarray(end + 2);
       lastFrame = frame;
-      io.to(`host:${localHostId}`).emit("frame", frame);
+      // Prefer base64 for Safari / iPhone viewers.
+      io.to(`host:${localHostId}`).emit(
+        "frame",
+        `data:image/jpeg;base64,${frame.toString("base64")}`
+      );
     }
   });
 
@@ -504,6 +510,7 @@ io.on("connection", (socket) => {
     const hostId = socket.data.hostId;
     if (!hostId || socket.data.role !== "host") return;
     if (!payload) return;
+    lastRelayFrames.set(hostId, payload);
     io.to(`host:${hostId}`).emit("frame", payload);
   });
 
@@ -542,7 +549,13 @@ io.on("connection", (socket) => {
     }
 
     if (runtime.mode === "local" && lastFrame) {
-      socket.emit("frame", lastFrame);
+      socket.emit(
+        "frame",
+        `data:image/jpeg;base64,${Buffer.from(lastFrame).toString("base64")}`
+      );
+    } else {
+      const cached = lastRelayFrames.get(host.id);
+      if (cached) socket.emit("frame", cached);
     }
 
     if (runtime.socketId) {

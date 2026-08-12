@@ -4,6 +4,7 @@
   const sessionView = document.getElementById("session-view");
   const hostList = document.getElementById("host-list");
   const homeEmpty = document.getElementById("home-empty");
+  const homeError = document.getElementById("home-error");
   const pinForm = document.getElementById("pin-form");
   const pinInput = document.getElementById("pin-input");
   const pinHostName = document.getElementById("pin-host-name");
@@ -23,13 +24,24 @@
   let selectedHost = null;
   let socket = null;
   let connected = false;
-  let frameUrl = null;
   let lastMoveSent = 0;
   let connectWatchdog = null;
   const image = new Image();
+  image.decoding = "async";
 
   refreshHosts();
-  setInterval(refreshHosts, 4000);
+  setInterval(refreshHosts, 3000);
+
+  // Live presence updates help iPhone see Online quickly.
+  const presence = io({ transports: ["websocket", "polling"] });
+  presence.on("hosts:updated", () => refreshHosts());
+  presence.on("connect_error", () => {
+    if (homeError) {
+      homeError.hidden = false;
+      homeError.textContent =
+        "Cannot reach server. On iPhone open https://74.208.54.132:5000 and tap Allow/Continue for the certificate.";
+    }
+  });
 
   pinForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -53,24 +65,15 @@
     showHome();
   });
   fullscreenBtn.addEventListener("click", async () => {
-    if (!document.fullscreenElement) await stage.requestFullscreen?.();
-    else await document.exitFullscreen?.();
+    try {
+      if (!document.fullscreenElement) await stage.requestFullscreen?.();
+      else await document.exitFullscreen?.();
+    } catch {
+      /* iPhone often has no fullscreen API */
+    }
   });
 
-  stage.addEventListener("mousemove", (e) => sendPointer("mousemove", e));
-  stage.addEventListener("mousedown", (e) => sendPointer("mousedown", e));
-  stage.addEventListener("mouseup", (e) => sendPointer("mouseup", e));
-  stage.addEventListener(
-    "wheel",
-    (e) => {
-      if (!connected || !socket) return;
-      e.preventDefault();
-      socket.emit("input", { type: "wheel", deltaX: e.deltaX, deltaY: e.deltaY });
-    },
-    { passive: false }
-  );
-  stage.addEventListener("contextmenu", (e) => e.preventDefault());
-
+  bindPointer(stage);
   window.addEventListener("keydown", (e) => {
     if (!connected || !socket || sessionView.hidden) return;
     e.preventDefault();
@@ -83,21 +86,27 @@
       canvas.height = image.naturalHeight;
     }
     ctx.drawImage(image, 0, 0);
-    if (frameUrl) URL.revokeObjectURL(frameUrl);
-    frameUrl = null;
     connected = true;
     clearTimeout(connectWatchdog);
     hideStageOverlay();
   };
+  image.onerror = () => {
+    setStageMessage("Received a bad frame. Waiting for next…");
+  };
 
   async function refreshHosts() {
-    if (!homeView.hidden) {
-      try {
-        const res = await fetch("/api/hosts");
-        const data = await res.json();
-        renderHosts(data.hosts || []);
-      } catch {
-        /* ignore */
+    if (homeView.hidden) return;
+    try {
+      const res = await fetch("/api/hosts", { cache: "no-store" });
+      if (!res.ok) throw new Error("bad status");
+      const data = await res.json();
+      if (homeError) homeError.hidden = true;
+      renderHosts(data.hosts || []);
+    } catch {
+      if (homeError) {
+        homeError.hidden = false;
+        homeError.textContent =
+          "Could not load computers. On iPhone use https://74.208.54.132:5000 and accept the security warning first.";
       }
     }
   }
@@ -139,18 +148,27 @@
   }
 
   async function startSession(hostId, pin) {
-    teardown();
-    socket = io({ transports: ["websocket", "polling"] });
+    teardown(false);
+    socket = io({
+      transports: ["websocket", "polling"],
+      upgrade: true,
+      rememberUpgrade: true,
+      timeout: 12000,
+    });
 
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("Server timed out")), 8000);
+      const timer = setTimeout(() => reject(new Error("Server timed out")), 12000);
       socket.once("connect", () => {
         clearTimeout(timer);
         resolve();
       });
       socket.once("connect_error", () => {
         clearTimeout(timer);
-        reject(new Error("Could not reach server"));
+        reject(
+          new Error(
+            "Could not reach server. On iPhone open https://74.208.54.132:5000 and continue past the certificate warning."
+          )
+        );
       });
     });
 
@@ -165,17 +183,17 @@
 
     sessionHostName.textContent = auth.host?.name || "Connected host";
     showSession();
-    setStageMessage("Waiting for screen… Keep the host page sharing.");
+    setStageMessage("Waiting for screen…");
     canvas.hidden = false;
     video.hidden = true;
 
     connectWatchdog = setTimeout(() => {
       if (!connected) {
         setStageMessage(
-          "Still waiting for frames. On the host PC, confirm sharing is active at /host."
+          "Still waiting. On the computer keep https://…/host sharing, then reconnect from iPhone."
         );
       }
-    }, 8000);
+    }, 10000);
 
     socket.on("host:disconnected", () => {
       teardown();
@@ -183,27 +201,113 @@
     });
 
     socket.on("frame", (payload) => {
-      const bytes = toBytes(payload);
-      if (!bytes) return;
-      if (frameUrl) URL.revokeObjectURL(frameUrl);
-      frameUrl = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
-      image.src = frameUrl;
+      applyFrame(payload);
     });
   }
 
-  function sendPointer(type, e) {
-    if (!connected || !socket) return;
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    if (x < 0 || y < 0 || x > 1 || y > 1) return;
-    if (type === "mousemove") {
-      const now = performance.now();
-      if (now - lastMoveSent < 40) return;
-      lastMoveSent = now;
+  function applyFrame(payload) {
+    if (typeof payload === "string") {
+      image.src = payload.startsWith("data:")
+        ? payload
+        : `data:image/jpeg;base64,${payload}`;
+      return;
     }
-    socket.emit("input", { type, x, y, button: e.button });
+
+    const bytes = toBytes(payload);
+    if (!bytes) return;
+    // Fallback binary path
+    const blob = new Blob([bytes], { type: "image/jpeg" });
+    const url = URL.createObjectURL(blob);
+    image.onload = () => {
+      if (canvas.width !== image.naturalWidth || canvas.height !== image.naturalHeight) {
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+      }
+      ctx.drawImage(image, 0, 0);
+      URL.revokeObjectURL(url);
+      connected = true;
+      clearTimeout(connectWatchdog);
+      hideStageOverlay();
+      image.onload = defaultImageOnload;
+    };
+    image.src = url;
+  }
+
+  function defaultImageOnload() {
+    if (canvas.width !== image.naturalWidth || canvas.height !== image.naturalHeight) {
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+    }
+    ctx.drawImage(image, 0, 0);
+    connected = true;
+    clearTimeout(connectWatchdog);
+    hideStageOverlay();
+  }
+  image.onload = defaultImageOnload;
+
+  function bindPointer(el) {
+    const forward = (type, e, touch) => {
+      if (!connected || !socket) return;
+      const point = touch || e;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const x = (point.clientX - rect.left) / rect.width;
+      const y = (point.clientY - rect.top) / rect.height;
+      if (x < 0 || y < 0 || x > 1 || y > 1) return;
+      if (type === "mousemove") {
+        const now = performance.now();
+        if (now - lastMoveSent < 50) return;
+        lastMoveSent = now;
+      }
+      socket.emit("input", {
+        type,
+        x,
+        y,
+        button: typeof e.button === "number" ? e.button : 0,
+      });
+    };
+
+    el.addEventListener("mousemove", (e) => forward("mousemove", e));
+    el.addEventListener("mousedown", (e) => forward("mousedown", e));
+    el.addEventListener("mouseup", (e) => forward("mouseup", e));
+    el.addEventListener(
+      "wheel",
+      (e) => {
+        if (!connected || !socket) return;
+        e.preventDefault();
+        socket.emit("input", { type: "wheel", deltaX: e.deltaX, deltaY: e.deltaY });
+      },
+      { passive: false }
+    );
+    el.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    el.addEventListener(
+      "touchstart",
+      (e) => {
+        if (!e.touches[0]) return;
+        e.preventDefault();
+        forward("mousedown", e, e.touches[0]);
+      },
+      { passive: false }
+    );
+    el.addEventListener(
+      "touchmove",
+      (e) => {
+        if (!e.touches[0]) return;
+        e.preventDefault();
+        forward("mousemove", e, e.touches[0]);
+      },
+      { passive: false }
+    );
+    el.addEventListener(
+      "touchend",
+      (e) => {
+        e.preventDefault();
+        const t = e.changedTouches[0];
+        if (t) forward("mouseup", e, t);
+      },
+      { passive: false }
+    );
   }
 
   function showHome() {
@@ -229,17 +333,14 @@
     stageOverlay.hidden = true;
   }
 
-  function teardown() {
+  function teardown(resetPresence = true) {
     connected = false;
     clearTimeout(connectWatchdog);
     if (socket) {
       socket.disconnect();
       socket = null;
     }
-    if (frameUrl) {
-      URL.revokeObjectURL(frameUrl);
-      frameUrl = null;
-    }
+    void resetPresence;
   }
 
   function toBytes(payload) {
