@@ -607,6 +607,7 @@ io.on("connection", (socket) => {
       const runtime = onlineHosts.get(hostId);
       if (runtime?.socketId === socket.id) {
         onlineHosts.delete(hostId);
+        lastRelayFrames.delete(hostId);
         io.to(`host:${hostId}`).emit("host:disconnected");
         io.emit("hosts:updated");
       }
