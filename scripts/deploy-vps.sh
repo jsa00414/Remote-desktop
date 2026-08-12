@@ -47,9 +47,10 @@ ARCHIVE="$(mktemp -t remote-desktop-XXXXXX.tar.gz)"
 tar -C "$ROOT" \
   --exclude=node_modules \
   --exclude=.git \
+  --exclude=data \
   --exclude='*.log' \
   -czf "$ARCHIVE" \
-  package.json package-lock.json server.js public README.md scripts/remote-desktop.service
+  package.json package-lock.json server.js public README.md scripts/remote-desktop.service scripts/Caddyfile.remote.example
 
 echo "Connecting to ${TARGET}…"
 ssh_cmd "$TARGET" "mkdir -p '$DEPLOY_PATH' && sudo mkdir -p /etc/systemd/system"
