@@ -1,0 +1,10 @@
+node_modules/
+data/
+npm-debug.log*
+.DS_Store
+.env
+*.log
+etc_wireguard/
+*.pem
+*.key
+wg0.conf

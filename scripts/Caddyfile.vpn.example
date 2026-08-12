@@ -1,0 +1,8 @@
+# Optional HTTPS front for the WireGuard Easy admin UI.
+# Point DNS (e.g. vpn.example.com) at this host, then:
+#   caddy run --config Caddyfile.vpn.example
+# and set INSECURE=false in .env / docker-compose.
+
+vpn.example.com {
+  reverse_proxy 127.0.0.1:51821
+}
