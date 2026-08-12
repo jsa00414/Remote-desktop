@@ -6,11 +6,17 @@ services:
     image: ghcr.io/wg-easy/wg-easy:15
     container_name: wg-easy
     environment:
-      # Allow HTTP admin UI when not behind HTTPS reverse proxy.
-      # Prefer putting Caddy/Traefik in front and setting INSECURE=false.
+      # HTTP admin UI (set false once behind HTTPS reverse proxy)
       - INSECURE=${INSECURE:-true}
-      - PORT=${UI_PORT:-51821}
+      - PORT=${UI_PORT:-5001}
       - HOST=0.0.0.0
+      # First-boot only — configures host/port + admin account
+      - INIT_ENABLED=${INIT_ENABLED:-true}
+      - INIT_USERNAME=${INIT_USERNAME:-admin}
+      - INIT_PASSWORD=${INIT_PASSWORD:-ChangeMe-WireGuard-5001}
+      - INIT_HOST=${WG_HOST:?Set WG_HOST in .env to your public IP or DNS}
+      - INIT_PORT=${WG_PORT:-5000}
+      - INIT_DNS=${INIT_DNS:-1.1.1.1,8.8.8.8}
     networks:
       wg:
         ipv4_address: 10.42.42.42
@@ -19,8 +25,10 @@ services:
       - etc_wireguard:/etc/wireguard
       - /lib/modules:/lib/modules:ro
     ports:
-      - "${WG_PORT:-51820}:51820/udp"
-      - "${UI_PORT:-51821}:51821/tcp"
+      # Internet / WireGuard tunnel
+      - "${WG_PORT:-5000}:${WG_PORT:-5000}/udp"
+      # VPN controls website
+      - "${UI_PORT:-5001}:${UI_PORT:-5001}/tcp"
     restart: unless-stopped
     cap_add:
       - NET_ADMIN

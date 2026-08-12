@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Open WireGuard + admin UI ports (ufw if present).
+# Defaults: UDP 5000 (tunnel), TCP 5001 (controls website)
 set -euo pipefail
 
-WG_PORT="${1:-51820}"
-UI_PORT="${2:-51821}"
+WG_PORT="${1:-5000}"
+UI_PORT="${2:-5001}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run as root: sudo $0 [wg_port] [ui_port]" >&2
@@ -11,8 +12,8 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 if command -v ufw >/dev/null 2>&1; then
-  ufw allow "${WG_PORT}/udp" comment 'WireGuard' || true
-  ufw allow "${UI_PORT}/tcp" comment 'WireGuard Easy UI' || true
+  ufw allow "${WG_PORT}/udp" comment 'WireGuard tunnel' || true
+  ufw allow "${UI_PORT}/tcp" comment 'WireGuard controls UI' || true
   ufw status || true
   echo "ufw rules applied for UDP/${WG_PORT} and TCP/${UI_PORT}"
 elif command -v firewall-cmd >/dev/null 2>&1; then

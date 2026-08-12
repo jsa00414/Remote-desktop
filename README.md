@@ -1,76 +1,53 @@
 # WireGuard VPN Server
 
-This repo runs a **WireGuard VPN server** with a web admin UI via [wg-easy](https://github.com/wg-easy/wg-easy) (Docker).
+WireGuard VPN with a web control panel ([wg-easy](https://github.com/wg-easy/wg-easy)).
 
-The previous remote-desktop app has been removed.
+| Service | Port | Purpose |
+|---------|------|---------|
+| **WireGuard** | **UDP 5000** | Internet / VPN tunnel |
+| **Controls website** | **TCP 5001** | Admin UI — clients, QR codes, configs |
 
-## What you get
-
-| Piece | Detail |
-|-------|--------|
-| VPN | WireGuard on **UDP 51820** |
-| Admin UI | Create clients, QR codes, download configs on **TCP 51821** |
-| Persist | Keys/clients stored in the `etc_wireguard` Docker volume |
-
-## Quick start (on the VPN host)
+## Quick start on the VPS
 
 ```bash
-# 1. Install Docker (Ubuntu/Debian)
-sudo bash scripts/install-docker.sh
-
-# 2. Configure
 cp .env.example .env
-# Edit WG_HOST to this machine's public IP or DNS name
+# Set WG_HOST to this server's public IP and set INIT_PASSWORD
 
-# 3. Open firewall ports
-sudo bash scripts/firewall.sh
-
-# 4. Start
+sudo bash scripts/install-docker.sh
+sudo bash scripts/firewall.sh 5000 5001
 docker compose up -d
 ```
 
-Open **http://YOUR_PUBLIC_IP:51821**, create the admin account, then add a client and scan the QR code in the official WireGuard app.
+Open **http://YOUR_IP:5001** → log in (`admin` / your `INIT_PASSWORD`) → add a client → scan QR in the WireGuard app.
 
-### Client apps
-
-- iPhone / Android: [WireGuard](https://www.wireguard.com/install/)
-- Windows / macOS / Linux: same site
-
-## Deploy to a VPS
-
-From a machine that can SSH to the VPS:
+## Deploy from your laptop / CI
 
 ```bash
 export VPS_HOST=74.208.54.132
 export VPS_USER=root
-export VPS_SSH_PRIVATE_KEY="$(cat ~/.ssh/id_rsa)"   # or use VPS_SSH_PASSWORD
-export WG_HOST=74.208.54.132                         # public address clients dial
+export VPS_SSH_PRIVATE_KEY="$(cat ~/.ssh/id_rsa)"   # or VPS_SSH_PASSWORD
+export WG_HOST=74.208.54.132
+export WG_PORT=5000
+export UI_PORT=5001
+export INIT_PASSWORD='your-strong-password'
 ./scripts/deploy-vps.sh
 ```
 
-Then open `http://VPS_HOST:51821`.
+## Client apps
 
-## Security notes
+Install [WireGuard](https://www.wireguard.com/install/) on phone/PC, then import the QR / config from the controls site.
 
-- **UDP 51820** must be reachable from the internet for the VPN.
-- **TCP 51821** is the admin UI — restrict it to your IP (cloud firewall / `ufw`) after setup.
-- Prefer HTTPS: put Caddy in front (`scripts/Caddyfile.vpn.example`) and set `INSECURE=false` in `.env`.
-- `INSECURE=true` allows HTTP UI for first-time setup only.
+## Security
 
-## Useful commands
+- Open **UDP 5000** to the internet (VPN).
+- Prefer restricting **TCP 5001** to your IP after setup.
+- Change `INIT_PASSWORD` immediately; remove `INIT_*` from `.env` after first boot if you like (settings persist in the Docker volume).
+- Optional HTTPS: `scripts/Caddyfile.vpn.example`, then set `INSECURE=false`.
+
+## Commands
 
 ```bash
 docker compose ps
 docker compose logs -f wg-easy
-docker compose pull && docker compose up -d   # update
-docker compose down                           # stop (keeps volume / clients)
+docker compose pull && docker compose up -d
 ```
-
-## Ports
-
-| Port | Protocol | Purpose |
-|------|----------|---------|
-| 51820 | UDP | WireGuard tunnel |
-| 51821 | TCP | Admin web UI |
-
-Docs: https://wg-easy.github.io/wg-easy/latest/
