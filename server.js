@@ -4,7 +4,7 @@ const { spawn } = require("child_process");
 const express = require("express");
 const { Server } = require("socket.io");
 
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 5000;
 const ACCESS_PASSWORD = "8112026";
 const HOST_NAME = process.env.HOST_NAME || "Connected host";
 const DISPLAY = process.env.DISPLAY || ":1";

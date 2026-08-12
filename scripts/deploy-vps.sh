@@ -9,7 +9,7 @@ HOST="${VPS_HOST:?VPS_HOST is required}"
 USER_NAME="${VPS_USER:?VPS_USER is required}"
 SSH_PORT="${VPS_SSH_PORT:-22}"
 DEPLOY_PATH="${VPS_DEPLOY_PATH:-/opt/remote-desktop}"
-APP_PORT="${VPS_APP_PORT:-3000}"
+APP_PORT="${VPS_APP_PORT:-5000}"
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new -p "$SSH_PORT")
 
 cleanup() {
