@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Remote Desktop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <div id="auth-view" class="auth-view">
+      <div class="auth-atmosphere" aria-hidden="true"></div>
+      <main class="auth-panel">
+        <p class="brand">Remote Desktop</p>
+        <h1>Connect to host</h1>
+        <p class="auth-sub">
+          Enter the access password to open the connected host session.
+        </p>
+        <form id="auth-form" class="auth-form" autocomplete="off">
+          <label class="field">
+            <span>Password</span>
+            <input
+              id="password-input"
+              name="password"
+              type="password"
+              inputmode="numeric"
+              maxlength="32"
+              required
+              autofocus
+              placeholder="Access password"
+            />
+          </label>
+          <p id="auth-error" class="auth-error" hidden></p>
+          <button type="submit" class="btn primary" id="connect-btn">
+            Connect
+          </button>
+        </form>
+        <p class="host-hint">
+          Host status:
+          <span id="host-status-label" class="status-pill online">Online</span>
+        </p>
+      </main>
+    </div>
+
+    <div id="session-view" class="session-view" hidden>
+      <header class="session-bar">
+        <div class="session-identity">
+          <span class="live-dot" aria-hidden="true"></span>
+          <div>
+            <p class="session-brand">Remote Desktop</p>
+            <h2 id="session-host-name">Connected host</h2>
+          </div>
+        </div>
+        <div class="session-actions">
+          <button type="button" class="btn ghost" id="fullscreen-btn" title="Fullscreen">
+            Fullscreen
+          </button>
+          <button type="button" class="btn danger" id="disconnect-btn">
+            Disconnect
+          </button>
+        </div>
+      </header>
+      <div class="stage" id="stage">
+        <canvas id="remote-canvas"></canvas>
+        <div id="stage-overlay" class="stage-overlay">
+          <p id="stage-message">Connecting to host…</p>
+        </div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/client.js"></script>
+  </body>
+</html>
