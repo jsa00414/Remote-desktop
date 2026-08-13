@@ -1,0 +1,14 @@
+guest1 Cleartext-Password := "Guest1-Pass"
+    Reply-Message := "Welcome guest1"
+
+guest2 Cleartext-Password := "Guest2-Pass"
+    Reply-Message := "Welcome guest2"
+
+guest3 Cleartext-Password := "Guest3-Pass"
+    Reply-Message := "Welcome guest3"
+
+guest4 Cleartext-Password := "Guest4-Pass"
+    Reply-Message := "Welcome guest4"
+
+guest5 Cleartext-Password := "Guest5-Pass"
+    Reply-Message := "Welcome guest5"
