@@ -139,6 +139,9 @@ class Bond:
         self.tun_name = tun
         self.host = host
         self.port = port
+        self.ports = [port]
+        self.active_port = port
+        self.port_locked = False
         self.mode = mode
         self.lan_bond = lan_bond
         self.seq = 0
@@ -146,6 +149,7 @@ class Bond:
         self.paths: List[dict] = []
         self.peer_addrs: List[Tuple[str, int]] = []
         self.peer_last: Dict[Tuple[str, int], float] = {}
+        self.peer_sock: Dict[Tuple[str, int], socket.socket] = {}
         self.seen: OrderedDict = OrderedDict()
         self.expect = None
         self.reorder: OrderedDict = OrderedDict()
@@ -201,6 +205,9 @@ class Bond:
             "state": state,
             "mode": self.mode,
             "egress": "vps",
+            "port": self.active_port,
+            "ports": self.ports,
+            "port_locked": self.port_locked,
             "policy_active": self.policy_active,
             "paths": live,
             "ok": self.ok,
@@ -248,18 +255,24 @@ class Bond:
 
     def send_keepalive(self) -> None:
         pkt = pack(self.key, 0, 0, b"", FLAG_KA)
+        now = time.time()
         if self.role == "client":
-            for p in self.paths:
-                try:
-                    p["sock"].sendto(pkt, (self.host, self.port))
-                    p["last"] = time.time()
-                except OSError:
-                    pass
+            # Probe every VPS UDP port until one answers; then stick to it so
+            # IONOS/NAT state stays on a single allowed port (8443/51820/4410).
+            probe_all = (not self.port_locked) or (now - self.last > 8)
+            dests = list(self.ports) if probe_all else [self.active_port]
+            for dest in dests:
+                for p in self.paths:
+                    try:
+                        p["sock"].sendto(pkt, (self.host, dest))
+                        p["last"] = now
+                    except OSError:
+                        pass
             return
-        if not self.socks:
-            return
-        sock = self.socks[0]
         for addr in self.live_peers():
+            sock = self.peer_sock.get(addr) or (self.socks[0] if self.socks else None)
+            if sock is None:
+                continue
             try:
                 sock.sendto(pkt, addr)
             except OSError:
@@ -278,23 +291,22 @@ class Bond:
                 i = seq % len(targets)
                 targets = [targets[i]]
         else:
-            if not self.socks:
-                return
-            sock = self.socks[0]
             addrs = self.live_peers()
-            if not addrs:
+            if not addrs or not self.socks:
                 return
             if duplicate:
-                targets = [(sock, addr, 0) for addr in addrs]
+                targets = [
+                    (self.peer_sock.get(addr) or self.socks[0], addr, 0) for addr in addrs
+                ]
             else:
                 addr = addrs[seq % len(addrs)]
-                targets = [(sock, addr, 0)]
+                targets = [(self.peer_sock.get(addr) or self.socks[0], addr, 0)]
         for sock, addr, idx in targets:
             try:
                 if addr:
                     sock.sendto(pkt, addr)
                 else:
-                    sock.sendto(pkt, (self.host, self.port))
+                    sock.sendto(pkt, (self.host, self.active_port))
                 self.bytes_up += len(payload)
                 if idx < len(self.paths):
                     self.paths[idx]["up"] += len(payload)
@@ -353,6 +365,7 @@ class Bond:
     def note_peer(self, addr: Tuple[str, int], sock: socket.socket, now: float, n: int) -> None:
         with self.lock:
             self.peer_last[addr] = now
+            self.peer_sock[addr] = sock
             if addr not in self.peer_addrs:
                 self.peer_addrs.append(addr)
                 self.paths.append(
@@ -400,6 +413,11 @@ class Bond:
                         continue
                     seq, path, flags, payload = parsed
                     self.last = now
+                    if self.role == "client" and addr[1] in self.ports:
+                        if addr[1] != self.active_port or not self.port_locked:
+                            print(f"wanbond: using VPS udp/{addr[1]}", flush=True)
+                        self.active_port = addr[1]
+                        self.port_locked = True
                     if self.role == "server":
                         self.note_peer(addr, item, now, len(payload))
                     else:
@@ -426,7 +444,7 @@ def setup_tun_addr(name: str, cidr: str) -> None:
     run(["sysctl", "-w", f"net.ipv4.conf.{name}.rp_filter=0"])
 
 
-def setup_server_nat(tun: str) -> None:
+def setup_server_nat(tun: str, ports: list) -> None:
     run(["sysctl", "-w", "net.ipv4.ip_forward=1"])
     run(["sysctl", "-w", f"net.ipv4.conf.{tun}.rp_filter=0"])
     chk = subprocess.run(
@@ -442,9 +460,18 @@ def setup_server_nat(tun: str) -> None:
     chk = subprocess.run(["iptables", "-C", "INPUT", "-i", tun, "-j", "ACCEPT"], capture_output=True)
     if chk.returncode != 0:
         run(["iptables", "-I", "INPUT", "1", "-i", tun, "-j", "ACCEPT"])
-    chk = subprocess.run(["iptables", "-C", "INPUT", "-p", "udp", "--dport", "4410", "-j", "ACCEPT"], capture_output=True)
-    if chk.returncode != 0:
-        run(["iptables", "-I", "INPUT", "1", "-p", "udp", "--dport", "4410", "-j", "ACCEPT"])
+    ensure_tcpmss(tun)
+    for port in ports:
+        chk = subprocess.run(
+            ["iptables", "-C", "INPUT", "-p", "udp", "--dport", str(port), "-j", "ACCEPT"],
+            capture_output=True,
+        )
+        if chk.returncode != 0:
+            run(["iptables", "-I", "INPUT", "1", "-p", "udp", "--dport", str(port), "-j", "ACCEPT"])
+        subprocess.run(
+            ["ufw", "allow", f"{port}/udp", "comment", "WAN bond"],
+            capture_output=True,
+        )
 
 
 def setup_client_base(tun: str, vps_ip: str) -> None:
@@ -464,6 +491,52 @@ def setup_client_base(tun: str, vps_ip: str) -> None:
         run(["ip", "route", "replace", vps_ip + "/32", "dev", dev])
     run(["sysctl", "-w", "net.ipv4.ip_forward=1"])
     run(["sysctl", "-w", f"net.ipv4.conf.{tun}.rp_filter=0"])
+    ensure_tcpmss(tun)
+
+
+def ensure_tcpmss(tun: str) -> None:
+    """Keep TCP from sending 1500-byte SYNs through the 1200 MTU tunnel."""
+    for direction in ("-o", "-i"):
+        chk = subprocess.run(
+            [
+                "iptables",
+                "-t",
+                "mangle",
+                "-C",
+                "FORWARD",
+                direction,
+                tun,
+                "-p",
+                "tcp",
+                "--tcp-flags",
+                "SYN,RST",
+                "SYN",
+                "-j",
+                "TCPMSS",
+                "--clamp-mss-to-pmtu",
+            ],
+            capture_output=True,
+        )
+        if chk.returncode != 0:
+            run(
+                [
+                    "iptables",
+                    "-t",
+                    "mangle",
+                    "-A",
+                    "FORWARD",
+                    direction,
+                    tun,
+                    "-p",
+                    "tcp",
+                    "--tcp-flags",
+                    "SYN,RST",
+                    "SYN",
+                    "-j",
+                    "TCPMSS",
+                    "--clamp-mss-to-pmtu",
+                ]
+            )
 
 
 def main() -> int:
@@ -472,7 +545,12 @@ def main() -> int:
     ap.add_argument("--key", required=True)
     ap.add_argument("--tun", default="smbond")
     ap.add_argument("--host", default="0.0.0.0")
-    ap.add_argument("--port", type=int, default=4410)
+    ap.add_argument("--port", type=int, default=8443)
+    ap.add_argument(
+        "--ports",
+        default="8443,51820,4410",
+        help="UDP ports. Server listens on all. Client probes all and uses whichever the VPS answers on.",
+    )
     ap.add_argument("--ifaces", default="")
     ap.add_argument("--mode", choices=["speed", "redundant", "auto"], default="speed")
     ap.add_argument("--lan-bond", action="store_true", help="Steer LAN through tunnel after health checks")
@@ -482,14 +560,36 @@ def main() -> int:
         print("wanbond: Speedify mode uses VPS egress; ignoring --egress host", flush=True)
     key = hashlib.sha256(args.key.encode()).digest()
     mode = "speed" if args.mode == "auto" else args.mode
+    ports = []
+    for part in (args.ports or str(args.port)).split(","):
+        part = part.strip()
+        if part.isdigit():
+            n = int(part)
+            if n not in ports:
+                ports.append(n)
+    if args.port not in ports:
+        ports.insert(0, args.port)
     bond = Bond(args.role, key, args.tun, args.host, args.port, mode, args.lan_bond)
+    bond.ports = ports
+    bond.active_port = args.port
 
     if args.role == "server":
         setup_tun_addr(args.tun, "10.9.0.1/24")
-        setup_server_nat(args.tun)
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(("0.0.0.0", args.port))
-        bond.add_sock(sock, {"iface": "udp", "ip": "0.0.0.0"})
+        setup_server_nat(args.tun, ports)
+        for port in ports:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind(("0.0.0.0", port))
+            except OSError as exc:
+                print(f"listen udp/{port} failed: {exc}", flush=True)
+                sock.close()
+                continue
+            bond.add_sock(sock, {"iface": f"udp{port}", "ip": "0.0.0.0"})
+            print(f"listen udp/{port}", flush=True)
+        if not bond.socks:
+            print("wanbond: no UDP listen ports bound", file=sys.stderr)
+            return 2
     else:
         setup_tun_addr(args.tun, "10.9.0.2/24")
         setup_client_base(args.tun, args.host)
@@ -513,9 +613,9 @@ def main() -> int:
                     sock.bind(("0.0.0.0", 0))
             bond.add_sock(sock, w)
         print("paths", ",".join(w["iface"] for w in wans), flush=True)
-        print("mode", mode, "lan_bond", args.lan_bond, flush=True)
+        print("mode", mode, "lan_bond", args.lan_bond, "ports", ",".join(str(x) for x in ports), flush=True)
 
-    print(f"wanbond {args.role} tun={args.tun} port={args.port} egress=vps", flush=True)
+    print(f"wanbond {args.role} tun={args.tun} ports={','.join(str(x) for x in ports)} egress=vps", flush=True)
     try:
         bond.loop()
     except KeyboardInterrupt:

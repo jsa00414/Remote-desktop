@@ -16,16 +16,32 @@ Combines every live WAN on the Flint (Wi‑Fi repeater, USB LTE, phone tether, e
 
 ## Commands
 
+The VPS listens on UDP **8443**, **51820**, and **4410**. The Flint probes those
+ports and locks onto whichever one the VPS answers on. IONOS (and similar cloud
+panels) often block unused UDP ports even when UFW allows them — 4410 is a
+common miss; 8443 usually works. Allow at least one of those UDP ports in the
+cloud firewall as well as UFW:
+
+```
+ufw allow 8443/udp
+ufw allow 51820/udp
+ufw allow 4410/udp
+```
+
+Do not use TCP 8443 for bonding; that port is already forwarded to Flint HTTPS.
+
 VPS:
 
 ```bash
-python3 /opt/wireguard/scripts/wanbond.py server --key <key> --port 4410 --mode speed
+python3 /opt/wireguard/scripts/wanbond.py server --key <key> --port 8443 --ports 8443,51820,4410 --mode speed
 ```
 
 Flint:
 
 ```bash
-python3 /usr/share/wanbond.py client --key <key> --host <vps-ip> --port 4410 --mode speed --lan-bond
+python3 /usr/share/wanbond.py client --key <key> --host <vps-ip> --port 8443 --ports 8443,51820,4410 --mode speed --lan-bond
 ```
 
-`--lan-bond` only steers `192.168.8.0/24` after three successful pings to `10.9.0.1` through `smbond`.
+`--lan-bond` only steers `192.168.8.0/24` after the tunnel is healthy. LAN then
+exits as the VPS public IP. Disconnect removes the policy route so Wi‑Fi uses
+the home ISP again.
