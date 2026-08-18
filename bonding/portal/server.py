@@ -529,6 +529,19 @@ WANBOND_KEY_FILE = Path(os.environ.get("WANBOND_KEY_FILE", "/opt/wireguard/wanbo
 WANBOND_STATUS = Path("/tmp/wanbond-status.json")
 _bond_lock = threading.Lock()
 
+UNKILL_SH = """#!/bin/sh
+# GL.iNet Tunnel 1 (7267) can stay live in iptables after UCI disable.
+# That marks all LAN with 0x1000 so only the VPS IP (portal) still works.
+iptables -t mangle -D ROUTE_POLICY -m addrtype ! --dst-type LOCAL -j TUNNEL7267_ROUTE_POLICY 2>/dev/null || true
+iptables -t mangle -F TUNNEL7267_ROUTE_POLICY 2>/dev/null || true
+ip rule del prio 9920 2>/dev/null || true
+ip rule del prio 9910 2>/dev/null || true
+ip rule del prio 800 2>/dev/null || true
+uci set route_policy.@rule[0].enabled='0' 2>/dev/null || true
+uci set route_policy.global.killswitch='0' 2>/dev/null || true
+uci set wireguard.global.global_proxy='0' 2>/dev/null || true
+"""
+
 
 def _wanbond_script() -> Path:
     if WANBOND_SCRIPT.is_file():
@@ -700,12 +713,13 @@ start_service() {{
   modprobe tun 2>/dev/null || true
   mkdir -p /dev/net
   [ -c /dev/net/tun ] || mknod /dev/net/tun c 10 200 2>/dev/null || true
-  uci set route_policy.@rule[0].enabled='0' 2>/dev/null || true
-  uci set wireguard.global.global_proxy='0' 2>/dev/null || true
-  uci set wireguard.peer_2001.allowed_ips='10.8.0.0/24' 2>/dev/null || true
-  uci commit route_policy 2>/dev/null || true
-  uci commit wireguard 2>/dev/null || true
-  PEER=$(wg show wgclient1 peers 2>/dev/null | head -1)
+    uci set route_policy.@rule[0].enabled='0' 2>/dev/null || true
+    uci set wireguard.global.global_proxy='0' 2>/dev/null || true
+    uci set wireguard.peer_2001.allowed_ips='10.8.0.0/24' 2>/dev/null || true
+    uci commit route_policy 2>/dev/null || true
+    uci commit wireguard 2>/dev/null || true
+    sh /usr/share/wanbond-unkill.sh 2>/dev/null || true
+    PEER=$(wg show wgclient1 peers 2>/dev/null | head -1)
   [ -n "$PEER" ] && wg set wgclient1 peer "$PEER" allowed-ips 10.8.0.0/24 2>/dev/null || true
   procd_open_instance
   procd_set_param command python3 /usr/share/wanbond.py client --key {wanbond_key()} --host {VPS_PUBLIC_IP} --port 8443 --ports 8443,51820,4410 --mode speed --egress vps --lan-bond
@@ -718,10 +732,18 @@ stop_service() {{
   ip route flush table 80 2>/dev/null || true
   ip link set smbond down 2>/dev/null || true
   kill $(pgrep -f '[p]ython3 /usr/share/wanbond.py') 2>/dev/null || true
+  sh /usr/share/wanbond-unkill.sh 2>/dev/null || true
 }}
 """
+    router_ssh("cat > /usr/share/wanbond-unkill.sh", input_text=UNKILL_SH)
+    router_ssh("chmod +x /usr/share/wanbond-unkill.sh")
+    router_ssh(
+        "cat > /etc/hotplug.d/iface/99-wanbond-unkill",
+        input_text='#!/bin/sh\n[ "$ACTION" = ifup ] || exit 0\nsh /usr/share/wanbond-unkill.sh\n',
+    )
     router_ssh("cat > /etc/init.d/wanbond", input_text=init)
     router_ssh("chmod +x /etc/init.d/wanbond /usr/share/wanbond.py && /etc/init.d/wanbond enable")
+    router_ssh("sh /usr/share/wanbond-unkill.sh")
     return {"ok": True, "stdout": "\n".join(logs), **read_bond_state()}
 
 
@@ -746,12 +768,12 @@ def apply_bond_action(payload: dict) -> dict:
                 **state,
             }
         if action in ("disconnect", "stop"):
-            subprocess.run(["systemctl", "stop", "wanbond"], capture_output=True)
             r = router_ssh(
                 "/etc/init.d/wanbond stop; "
                 "kill $(pgrep -f '[p]ython3 /usr/share/wanbond.py') 2>/dev/null || true; "
                 "ip rule del from 192.168.8.0/24 lookup 80 2>/dev/null || true; "
-                "ip route flush table 80 2>/dev/null || true; ip link set smbond down 2>/dev/null || true"
+                "ip route flush table 80 2>/dev/null || true; ip link set smbond down 2>/dev/null || true; "
+                "sh /usr/share/wanbond-unkill.sh 2>/dev/null || true"
             )
             state = read_bond_state()
             return {"ok": True, "stdout": r.stdout or "stopped", "bond": state, **state}

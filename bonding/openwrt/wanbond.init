@@ -14,6 +14,7 @@ start_service() {
   uci set wireguard.peer_2001.allowed_ips='10.8.0.0/24' 2>/dev/null || true
   uci commit route_policy 2>/dev/null || true
   uci commit wireguard 2>/dev/null || true
+  sh /usr/share/wanbond-unkill.sh 2>/dev/null || true
   PEER=$(wg show wgclient1 peers 2>/dev/null | head -1)
   [ -n "$PEER" ] && wg set wgclient1 peer "$PEER" allowed-ips 10.8.0.0/24 2>/dev/null || true
   KEY=$(cat /etc/wanbond.key 2>/dev/null | tr -d '\n')
@@ -30,4 +31,5 @@ stop_service() {
   ip route flush table 80 2>/dev/null || true
   ip link set smbond down 2>/dev/null || true
   kill $(pgrep -f '[p]ython3 /usr/share/wanbond.py') 2>/dev/null || true
+  sh /usr/share/wanbond-unkill.sh 2>/dev/null || true
 }
