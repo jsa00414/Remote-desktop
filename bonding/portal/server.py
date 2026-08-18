@@ -530,7 +530,7 @@ WANBOND_STATUS = Path("/tmp/wanbond-status.json")
 _bond_lock = threading.Lock()
 
 UNKILL_SH = r"""#!/bin/sh
-# Undo leftover GL.iNet Tunnel 1 / VPN leak firewall so Wi-Fi has internet.
+# Undo leftover Tunnel 1 / DNS-leak firewall. Does not change WireGuard.
 iptables -t mangle -D ROUTE_POLICY -m addrtype ! --dst-type LOCAL -j TUNNEL7267_ROUTE_POLICY 2>/dev/null || true
 iptables -t mangle -F TUNNEL7267_ROUTE_POLICY 2>/dev/null || true
 ip rule del prio 9920 2>/dev/null || true
@@ -546,13 +546,7 @@ uci set firewall.lan_drop_leaked_adgdns.enabled='0' 2>/dev/null || true
 uci set firewall.guest_drop_leaked_dns.enabled='0' 2>/dev/null || true
 uci set firewall.guest_drop_leaked_adgdns.enabled='0' 2>/dev/null || true
 uci set firewall.tcp_dns_leak_drop.enabled='0' 2>/dev/null || true
-uci set route_policy.@rule[0].enabled='0' 2>/dev/null || true
-uci set route_policy.global.killswitch='0' 2>/dev/null || true
-uci set route_policy.global.instance_on='0' 2>/dev/null || true
-uci set wireguard.global.global_proxy='0' 2>/dev/null || true
 uci commit firewall 2>/dev/null || true
-uci commit route_policy 2>/dev/null || true
-uci commit wireguard 2>/dev/null || true
 """
 
 
@@ -726,14 +720,7 @@ start_service() {{
   modprobe tun 2>/dev/null || true
   mkdir -p /dev/net
   [ -c /dev/net/tun ] || mknod /dev/net/tun c 10 200 2>/dev/null || true
-    uci set route_policy.@rule[0].enabled='0' 2>/dev/null || true
-    uci set wireguard.global.global_proxy='0' 2>/dev/null || true
-    uci set wireguard.peer_2001.allowed_ips='10.8.0.0/24' 2>/dev/null || true
-    uci commit route_policy 2>/dev/null || true
-    uci commit wireguard 2>/dev/null || true
-    sh /usr/share/wanbond-unkill.sh 2>/dev/null || true
-    PEER=$(wg show wgclient1 peers 2>/dev/null | head -1)
-  [ -n "$PEER" ] && wg set wgclient1 peer "$PEER" allowed-ips 10.8.0.0/24 2>/dev/null || true
+  sh /usr/share/wanbond-unkill.sh 2>/dev/null || true
   procd_open_instance
   procd_set_param command python3 /usr/share/wanbond.py client --key {wanbond_key()} --host {VPS_PUBLIC_IP} --port 8443 --ports 8443,51820,4410 --mode speed --egress vps --lan-bond
   procd_set_param respawn
