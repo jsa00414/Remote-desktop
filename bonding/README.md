@@ -67,3 +67,7 @@ the home ISP again.
 
 Keep GL.iNet Tunnel 1 **off**, `global_proxy=0`, and WireGuard AllowedIPs
 `10.8.0.0/24` only. Do not set AllowedIPs to `0.0.0.0/0`.
+
+If phones can open the portal but nothing else, Tunnel 1 is still marking LAN
+for WireGuard. Run `scripts/wanbond-unkill.sh` on the Flint (the portal
+Connect/Disconnect buttons do this automatically).
