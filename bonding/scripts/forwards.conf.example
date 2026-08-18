@@ -1,0 +1,5 @@
+# VPS public port  proto  dest IP         dest port  name
+# Do not forward 80/443 — Caddy uses them on this VPS.
+2222  tcp 10.8.0.3        22    flint-ssh
+8080  tcp 192.168.8.1     80    flint-http
+8443  tcp 192.168.8.1     443   flint-https

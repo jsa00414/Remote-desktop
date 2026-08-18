@@ -1,0 +1,13 @@
+[Unit]
+Description=ServerManager Speedify-style WAN bond
+After=network.target
+
+[Service]
+Type=simple
+# Put the HMAC key in /opt/wireguard/wanbond.key (not in git).
+ExecStart=/bin/bash -c '/usr/bin/python3 /opt/wireguard/scripts/wanbond.py server --key "$(tr -d "\\n" < /opt/wireguard/wanbond.key)" --port 8443 --ports 8443,51820,4410 --mode speed --egress vps'
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>ServerManager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg0: #0a0f0d;
+      --bg1: #111916;
+      --bg2: #17221d;
+      --bg3: #1e2b25;
+      --line: rgba(170, 210, 185, 0.12);
+      --text: #e8f2ec;
+      --muted: #84998c;
+      --accent: #3ddea0;
+      --accent-dim: rgba(61, 222, 160, 0.12);
+      --danger: #ff6b6b;
+      --ok: #3ddea0;
+      --warn: #e2b45a;
+      --sidebar-w: 228px;
+      --top-h: 60px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: "Sora", system-ui, sans-serif;
+      color: var(--text);
+      background: var(--bg0);
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      grid-template-rows: var(--top-h) 1fr;
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
+
+    .topbar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--bg1) 94%, black);
+    }
+    .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .brand-mark {
+      width: 32px; height: 32px; border-radius: 9px;
+      background: linear-gradient(145deg, var(--accent), #1f8f66);
+      color: #062016; font-weight: 700; font-size: .78rem;
+      display: grid; place-items: center; flex: none;
+    }
+    .brand h1 { margin: 0; font-size: 1rem; letter-spacing: -.02em; }
+    .brand p { margin: 1px 0 0; color: var(--muted); font-size: .72rem; }
+    .top-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .status {
+      font-family: "IBM Plex Mono", monospace; font-size: .7rem; color: var(--muted);
+      background: var(--bg2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px;
+      max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .status.ok { color: var(--ok); border-color: rgba(61,222,160,.35); background: var(--accent-dim); }
+    .status.err { color: var(--danger); border-color: rgba(255,107,107,.35); }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: var(--bg1);
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow: auto;
+    }
+    .nav-label {
+      color: var(--muted); font-size: .65rem; letter-spacing: .12em; text-transform: uppercase;
+      padding: 10px 10px 4px; font-weight: 600;
+    }
+    .nav-btn {
+      width: 100%; text-align: left; border: 1px solid transparent; background: transparent;
+      color: var(--text); border-radius: 10px; padding: 9px 11px; cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      font-family: inherit; font-size: .84rem; font-weight: 600;
+    }
+    .nav-btn .nav-copy { display: grid; gap: 1px; min-width: 0; }
+    .nav-btn small { color: var(--muted); font-weight: 500; font-size: .68rem; }
+    .nav-btn:hover { background: var(--bg2); border-color: var(--line); }
+    .nav-btn.active {
+      background: var(--accent-dim); border-color: rgba(61,222,160,.28); color: var(--accent);
+    }
+    .nav-btn.active small { color: rgba(61,222,160,.85); }
+    .count {
+      min-width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center;
+      background: var(--bg3); color: var(--muted); font-family: "IBM Plex Mono", monospace; font-size: .68rem;
+    }
+    .nav-btn.active .count { background: rgba(61,222,160,.2); color: var(--accent); }
+    .sidebar-foot {
+      margin-top: auto; padding: 12px 10px; color: var(--muted); font-size: .7rem; line-height: 1.45;
+      border-top: 1px solid var(--line);
+    }
+
+    .main {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      min-width: 0;
+      background:
+        radial-gradient(640px 240px at 100% 0%, rgba(61,222,160,.07), transparent 55%),
+        var(--bg0);
+    }
+    .content { overflow: auto; padding: 18px 20px 24px; }
+    .view { display: none; }
+    .view.active { display: block; }
+
+    .page-head { margin: 0 0 14px; }
+    .page-head h2 { margin: 0; font-size: 1.18rem; letter-spacing: -.03em; }
+    .page-head p { margin: 6px 0 0; color: var(--muted); font-size: .84rem; line-height: 1.45; max-width: 62ch; }
+
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      margin-bottom: 14px;
+    }
+    .toolbar .spacer { flex: 1; }
+
+    .callout {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding: 12px 14px; margin-bottom: 14px;
+      border: 1px solid var(--line); border-radius: 12px;
+      background: rgba(61,222,160,.06);
+      color: var(--muted); font-size: .8rem; line-height: 1.45;
+    }
+    .callout strong { color: var(--text); font-weight: 600; }
+    .callout.warn { background: rgba(226,180,90,.08); }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .stat {
+      text-align: left; cursor: pointer;
+      background: var(--bg1); border: 1px solid var(--line); border-radius: 14px;
+      padding: 14px; color: inherit; font-family: inherit;
+    }
+    .stat:hover { border-color: rgba(61,222,160,.35); }
+    .stat .k { color: var(--muted); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; }
+    .stat .v { margin: 8px 0 4px; font-size: 1.45rem; font-weight: 700; letter-spacing: -.03em; }
+    .stat .s { color: var(--muted); font-size: .75rem; }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1.4fr .8fr;
+      gap: 12px;
+    }
+    .panel {
+      background: var(--bg1);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .panel-head {
+      display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center;
+      padding: 12px 14px; border-bottom: 1px solid var(--line);
+    }
+    .panel-head h3 { margin: 0; font-size: .92rem; }
+    .panel-body { padding: 12px 14px; }
+    .hint { color: var(--muted); font-size: .76rem; line-height: 1.4; }
+
+    .group { margin-bottom: 16px; }
+    .group-title {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      margin: 0 0 8px; color: var(--muted); font-size: .72rem; letter-spacing: .08em;
+      text-transform: uppercase; font-weight: 600;
+    }
+
+    .cards { display: grid; gap: 8px; }
+    .rule {
+      background: var(--bg1);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .rule.locked { opacity: .88; }
+    .rule.off { opacity: .62; }
+    .rule-top {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    }
+    .rule-top .name { flex: 1; min-width: 0; }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 8px;
+      align-items: end;
+    }
+    .field { display: grid; gap: 5px; min-width: 0; }
+    .field.wide { min-width: 220px; }
+    .field span {
+      color: var(--muted); font-size: .65rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 600;
+    }
+    .ip-pick { display: grid; gap: 6px; }
+    .ip-pick select {
+      width: 100%;
+      font-family: "Sora", system-ui, sans-serif;
+      font-size: .82rem;
+      font-weight: 600;
+    }
+    .arrow { display: none; }
+    .toggles { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+    button {
+      font-family: inherit; font-weight: 600; font-size: .82rem; border-radius: 9px;
+      border: 1px solid var(--line); background: var(--bg2); color: var(--text);
+      padding: 8px 12px; cursor: pointer;
+    }
+    button:hover { border-color: rgba(61,222,160,.35); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    button.primary { background: var(--accent); color: #062016; border-color: transparent; }
+    button.ghost { background: transparent; color: var(--muted); }
+    button.ghost:hover { color: var(--text); }
+    button.ghost.danger { color: var(--danger); padding: 6px 9px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    input, select {
+      width: 100%; font-family: "IBM Plex Mono", monospace; font-size: .82rem;
+      color: var(--text); background: var(--bg0); border: 1px solid var(--line);
+      border-radius: 8px; padding: 8px 9px; outline: none;
+    }
+    input:focus, select:focus { border-color: rgba(61,222,160,.55); box-shadow: 0 0 0 3px rgba(61,222,160,.12); }
+    input[readonly], select:disabled { opacity: .75; cursor: default; background: #0a0f0d; }
+    .empty { padding: 22px 12px; text-align: center; color: var(--muted); font-size: .84rem; }
+
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      border-radius: 999px; padding: 3px 8px;
+      font-family: "IBM Plex Mono", monospace; font-size: .68rem;
+      border: 1px solid var(--line); color: var(--muted); background: var(--bg2);
+    }
+    .chip.ok { color: var(--ok); border-color: rgba(61,222,160,.3); background: var(--accent-dim); }
+    .chip.warn { color: var(--warn); border-color: rgba(226,180,90,.35); }
+    .chip.bad { color: var(--danger); border-color: rgba(255,107,107,.3); }
+
+    .switch {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--muted); font-size: .75rem; font-weight: 600; cursor: pointer; user-select: none;
+    }
+    .switch input { width: auto; accent-color: var(--accent); }
+    .switch input:disabled { cursor: default; }
+
+    .lan-list { display: grid; gap: 6px; }
+    .lan-row {
+      display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+      padding: 8px 0; border-bottom: 1px solid var(--line); font-size: .82rem;
+    }
+    .lan-row:last-child { border-bottom: 0; }
+    .lan-row code { font-family: "IBM Plex Mono", monospace; color: var(--accent); font-size: .78rem; }
+    .lan-row span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .meta-box {
+      background: var(--bg1); border: 1px solid var(--line); border-radius: 12px; padding: 12px;
+    }
+    .meta-box label { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 6px; }
+
+    .drawer {
+      border-top: 1px solid var(--line);
+      background: var(--bg1);
+    }
+    .drawer.collapsed .log { display: none; }
+    .drawer-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 16px; color: var(--muted); font-size: .75rem;
+      cursor: pointer; user-select: none;
+    }
+    .log {
+      margin: 0; white-space: pre-wrap; font-family: "IBM Plex Mono", monospace;
+      font-size: .72rem; line-height: 1.45; color: #b7cfc3; background: #080c0a;
+      padding: 12px 16px; overflow: auto; max-height: 180px;
+    }
+    .path { font-family: "IBM Plex Mono", monospace; font-size: .7rem; color: var(--muted); }
+
+    @media (max-width: 980px) {
+      .stats, .split { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 900px) {
+      body {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      .topbar { flex-wrap: wrap; height: auto; padding: 10px 12px; }
+      .brand p { display: none; }
+      .top-right { width: 100%; }
+      .top-right .status { flex: 1; max-width: none; }
+      .sidebar {
+        flex-direction: row; overflow-x: auto; -webkit-overflow-scrolling: touch;
+        border-right: none; border-bottom: 1px solid var(--line); padding: 8px 10px; gap: 6px;
+      }
+      .nav-label, .sidebar-foot, .nav-btn small { display: none; }
+      .nav-btn { white-space: nowrap; width: auto; flex: none; }
+      .content { padding: 12px; }
+      input, select { font-size: 16px; min-height: 44px; }
+      button { min-height: 40px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">SM</div>
+      <div>
+        <h1>ServerManager</h1>
+        <p>Internet · Router · Domains · Firewall</p>
+      </div>
+    </div>
+    <div class="top-right">
+      <div id="status" class="status">Loading…</div>
+      <div class="actions">
+        <button type="button" id="reloadBtn">Reload</button>
+        <button type="button" class="primary" id="saveBtn">Save &amp; Apply</button>
+        <button type="button" class="ghost" id="logoutBtn">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <div class="nav-label">Portal</div>
+    <button type="button" class="nav-btn active" data-view="overview">
+      <span class="nav-copy"><span>Overview</span><small>Status at a glance</small></span>
+    </button>
+    <div class="nav-label">Network</div>
+    <button type="button" class="nav-btn" data-view="vps">
+      <span class="nav-copy"><span>Internet</span><small>Public → LAN</small></span>
+      <span class="count" id="vpsCount">0</span>
+    </button>
+    <button type="button" class="nav-btn" data-view="router">
+      <span class="nav-copy"><span>Router</span><small>Flint WAN / WG</small></span>
+      <span class="count" id="routerCount">0</span>
+    </button>
+    <button type="button" class="nav-btn" data-view="bond">
+      <span class="nav-copy"><span>Bonding</span><small>Combine WAN links</small></span>
+      <span class="count" id="bondCount">—</span>
+    </button>
+    <button type="button" class="nav-btn" data-view="domains">
+      <span class="nav-copy"><span>Domains</span><small>HTTPS names</small></span>
+      <span class="count" id="hookupCount">0</span>
+    </button>
+    <button type="button" class="nav-btn" data-view="firewall">
+      <span class="nav-copy"><span>Firewall</span><small>UFW allows</small></span>
+      <span class="count" id="fwCount">0</span>
+    </button>
+    <div class="sidebar-foot">
+      Save applies VPS DNAT, Flint forwards, Caddy, and UFW together.
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="content">
+      <section class="view active" id="view-overview">
+        <div class="page-head">
+          <h2>Overview</h2>
+          <p>Pick a section to edit. Internet is for the public VPS. Router is only for traffic that hits the Flint itself.</p>
+        </div>
+        <div class="stats">
+          <button type="button" class="stat" data-go="vps">
+            <div class="k">Internet</div>
+            <div class="v" id="ovVps">0</div>
+            <div class="s">public port forwards</div>
+          </button>
+          <button type="button" class="stat" data-go="router">
+            <div class="k">Router</div>
+            <div class="v" id="ovRouter">0</div>
+            <div class="s">Flint redirects</div>
+          </button>
+          <button type="button" class="stat" data-go="domains">
+            <div class="k">Domains</div>
+            <div class="v" id="ovDomains">0</div>
+            <div class="s" id="ovDomainNote">HTTPS hookups</div>
+          </button>
+          <button type="button" class="stat" data-go="firewall">
+            <div class="k">Firewall</div>
+            <div class="v" id="ovFw">0</div>
+            <div class="s" id="ovFwNote">UFW allow rules</div>
+          </button>
+          <button type="button" class="stat" data-go="bond">
+            <div class="k">Bonding</div>
+            <div class="v" id="ovBond">—</div>
+            <div class="s" id="ovBondNote">combine WANs</div>
+          </button>
+        </div>
+        <div class="split">
+          <div class="panel">
+            <div class="panel-head"><h3>How traffic is routed</h3></div>
+            <div class="panel-body">
+              <p class="hint"><strong>Internet</strong> — visitors hit the VPS public IP, then WireGuard to a LAN device. Use this for Windows RDP, websites, and most remote access.</p>
+              <p class="hint" style="margin-top:10px"><strong>Router</strong> — only for the Flint WAN or WireGuard into the router. Not required if the VPS already forwards the port.</p>
+              <p class="hint" style="margin-top:10px"><strong>Bonding</strong> — combines the Flint’s internet links (WAN + USB/LTE/phone tether) into one pipe through the VPS. No Speedify account.</p>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <h3>LAN devices</h3>
+              <button type="button" class="ghost" id="refreshLanBtnOv">Refresh</button>
+            </div>
+            <div class="panel-body">
+              <div id="ovLan" class="lan-list"><div class="empty">No devices yet.</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-vps">
+        <div class="page-head">
+          <h2>Internet forwards</h2>
+          <p>Public VPS port → GL.iNet LAN over WireGuard. This is the path for phones and the internet.</p>
+        </div>
+        <div class="callout"><div>Use a <strong>public port</strong> (example 4000) to a LAN IP and service port (example 3389 for Remote Desktop).</div></div>
+        <div class="toolbar">
+          <button type="button" id="addVpsBtn">Add forward</button>
+        </div>
+        <div class="group">
+          <div class="group-title">Your forwards</div>
+          <div class="cards" id="vpsMine"></div>
+          <div id="vpsEmpty" class="empty" hidden>No custom forwards yet.</div>
+        </div>
+        <div class="group">
+          <div class="group-title">System / already on this VPS</div>
+          <div class="cards" id="vpsSystem"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-router">
+        <div class="page-head">
+          <h2>GL.iNet router</h2>
+          <p id="routerHint">Only needed for local WAN or traffic arriving on the Flint — not for public VPS access.</p>
+        </div>
+        <div class="callout warn"><div>Leave this alone unless you want the Windows PC reachable through the <strong>router WAN</strong>, not the VPS.</div></div>
+        <div class="meta-grid">
+          <div class="meta-box">
+            <label for="dmzIp">DMZ host</label>
+            <div class="ip-pick">
+              <select class="ip-menu" id="dmzMenu" aria-label="DMZ device"></select>
+              <input id="dmzIp" placeholder="192.168.8.x" />
+            </div>
+            <div class="hint" style="margin-top:6px">Pick a computer by name, or type an IP</div>
+          </div>
+          <div class="meta-box">
+            <label>LAN directory</label>
+            <div class="hint" id="lanHint">LAN devices: —</div>
+            <button type="button" class="ghost" id="refreshLanBtn" style="margin-top:8px">Refresh LAN</button>
+          </div>
+        </div>
+        <div class="toolbar">
+          <button type="button" id="addRouterBtn">Add redirect</button>
+        </div>
+        <div class="cards" id="routerRows"></div>
+        <div id="routerEmpty" class="empty" hidden>No router redirects.</div>
+      </section>
+
+      <section class="view" id="view-bond">
+        <div class="page-head">
+          <h2>Bonding</h2>
+          <p>Speedify-style channel bonding. Every live WAN on the Flint is combined into one encrypted tunnel. Wi-Fi devices share that pipe. While connected, internet exits from the VPS IP. Disconnect returns Wi-Fi to the home ISP immediately.</p>
+        </div>
+        <div class="callout"><div><strong>Connect</strong> waits until the tunnel can ping, then steers LAN. The VPS answers on UDP <strong>8443</strong>, <strong>51820</strong>, and <strong>4410</strong> — the Flint uses whichever port the cloud firewall allows. If IONOS blocks 4410, 8443 still works. Plug in a second link (USB LTE / phone tether) to aggregate.</div></div>
+        <div class="toolbar">
+          <button type="button" class="primary" id="bondStartBtn">Connect</button>
+          <button type="button" id="bondStopBtn">Disconnect</button>
+          <button type="button" id="bondRefreshBtn">Refresh</button>
+          <button type="button" id="bondInstallBtn">Install</button>
+        </div>
+        <div class="meta-grid" id="bondMeta"></div>
+        <div class="group">
+          <div class="group-title">Bonded channels</div>
+          <div class="cards" id="bondLinks"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-domains">
+        <div class="page-head">
+          <h2>Domain hookups</h2>
+          <p id="hookupsHint">HTTPS names through Caddy. Save creates/updates Cloudflare DNS and certificates.</p>
+        </div>
+        <div class="callout"><div id="dnsHint">Create Cloudflare A records (DNS only) → your VPS IP. Save &amp; Apply auto-issues HTTPS.</div></div>
+        <div class="toolbar">
+          <button type="button" id="addHookupBtn">Add domain</button>
+        </div>
+        <div class="group">
+          <div class="group-title">Managed domains</div>
+          <div class="cards" id="hookupMine"></div>
+          <div id="hookupEmpty" class="empty" hidden>No managed domains.</div>
+        </div>
+        <div class="group">
+          <div class="group-title">Existing Caddy sites</div>
+          <div class="cards" id="hookupSystem"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-firewall">
+        <div class="page-head">
+          <h2>Firewall</h2>
+          <p id="fwHint">UFW on the VPS. VPN checked = WireGuard clients only.</p>
+        </div>
+        <div class="meta-grid" id="fwMeta"></div>
+        <div class="toolbar">
+          <button type="button" id="addFwBtn">Allow port</button>
+        </div>
+        <div class="group">
+          <div class="group-title">Your allows</div>
+          <div class="cards" id="fwMine"></div>
+          <div id="fwEmpty" class="empty" hidden>No extra allow rules.</div>
+        </div>
+        <div class="group">
+          <div class="group-title">Protected (always public)</div>
+          <div class="cards" id="fwSystem"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="drawer collapsed" id="drawer">
+      <div class="drawer-head" id="drawerHead">
+        <span>Activity log</span>
+        <span class="path" id="pathLabel">tap to expand</span>
+      </div>
+      <pre id="log" class="log">Ready.</pre>
+    </div>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const pathLabel = document.getElementById("pathLabel");
+    const logEl = document.getElementById("log");
+    const drawer = document.getElementById("drawer");
+    const dmzIpEl = document.getElementById("dmzIp");
+    const dnsHint = document.getElementById("dnsHint");
+    const saveBtn = document.getElementById("saveBtn");
+    const reloadBtn = document.getElementById("reloadBtn");
+    const vpsCount = document.getElementById("vpsCount");
+    const routerCount = document.getElementById("routerCount");
+    const hookupCount = document.getElementById("hookupCount");
+    const fwCount = document.getElementById("fwCount");
+
+    let comments = [];
+    let vpsRules = [];
+    let routerRules = [];
+    let hookupRules = [];
+    let fwRules = [];
+    let fwInfo = {};
+    let lanDevices = [];
+
+    function showView(name) {
+      document.querySelectorAll(".nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+      document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
+      if (name === "bond") loadBond().catch((e) => setStatus(e.message, "err"));
+    }
+    function friendlyHost(d) {
+      const host = String(d.hostname || "").trim();
+      if (host) return host;
+      if (d.ip === "192.168.8.1") return "GL.iNet Flint";
+      return "";
+    }
+    function lanChoices() {
+      const list = lanDevices.map((d) => ({ ...d }));
+      if (!list.some((d) => d.ip === "192.168.8.1")) {
+        list.unshift({ ip: "192.168.8.1", hostname: "GL.iNet Flint", source: "router" });
+      }
+      list.sort((a, b) => {
+        const ah = friendlyHost(a);
+        const bh = friendlyHost(b);
+        if (!!ah !== !!bh) return ah ? -1 : 1;
+        if (ah && bh) return ah.localeCompare(bh, undefined, { sensitivity: "base" });
+        return a.ip.localeCompare(b.ip, undefined, { numeric: true });
+      });
+      return list;
+    }
+    function lanMenuOptions(selectedIp) {
+      const val = String(selectedIp || "");
+      const choices = lanChoices();
+      const named = choices.filter((d) => friendlyHost(d));
+      const other = choices.filter((d) => !friendlyHost(d));
+      const known = choices.some((d) => d.ip === val);
+      const opt = (d, selected) =>
+        `<option value="${esc(d.ip)}" ${selected ? "selected" : ""}>${esc(friendlyHost(d) || "Unnamed")} — ${esc(d.ip)}</option>`;
+      let html = `<option value="">Choose a computer…</option>`;
+      if (named.length) {
+        html += `<optgroup label="Named devices">` + named.map((d) => opt(d, d.ip === val)).join("") + `</optgroup>`;
+      }
+      if (other.length) {
+        html += `<optgroup label="Other LAN IPs">` + other.map((d) => opt(d, d.ip === val)).join("") + `</optgroup>`;
+      }
+      if (val && !known) {
+        html += `<option value="${esc(val)}" selected>${esc(val)} — current</option>`;
+      }
+      return html;
+    }
+    function refreshLanDatalist() {
+      const hint = document.getElementById("lanHint");
+      if (hint) {
+        hint.textContent = lanDevices.length
+          ? `${lanDevices.length} devices from Flint DHCP/ARP`
+          : "No LAN devices (check Flint SSH)";
+      }
+      const ov = document.getElementById("ovLan");
+      if (ov) {
+        const rows = lanChoices();
+        ov.innerHTML = rows.length
+          ? rows.map((d) => `<div class="lan-row"><span>${esc(friendlyHost(d) || "Unnamed")}</span><code>${esc(d.ip)}</code></div>`).join("")
+          : `<div class="empty">No devices yet.</div>`;
+      }
+      const dmzMenu = document.getElementById("dmzMenu");
+      const dmzIp = document.getElementById("dmzIp");
+      if (dmzMenu && dmzIp) dmzMenu.innerHTML = lanMenuOptions(dmzIp.value);
+      bindIpPickers();
+    }
+    function lanIpField(value, locked, dataKey) {
+      const val = String(value || "");
+      if (locked) {
+        const host = friendlyHost(lanChoices().find((d) => d.ip === val) || {});
+        return `<input data-k="${dataKey}" value="${esc(val)}" readonly title="${esc(host || val)}" />`;
+      }
+      return `<div class="ip-pick">
+        <select class="ip-menu" aria-label="LAN device">${lanMenuOptions(val)}</select>
+        <input data-k="${dataKey}" value="${esc(val)}" placeholder="or type IP" />
+      </div>`;
+    }
+    function bindIpPickers(root = document) {
+      root.querySelectorAll(".ip-pick").forEach((box) => {
+        const menu = box.querySelector(".ip-menu");
+        const input = box.querySelector("input");
+        if (!menu || !input) return;
+        menu.onchange = () => {
+          if (menu.value) input.value = menu.value;
+          else input.focus();
+        };
+        input.oninput = () => {
+          const match = [...menu.options].some((o) => o.value && o.value === input.value);
+          menu.value = match ? input.value : "";
+        };
+      });
+    }
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      statusEl.className = "status" + (kind ? " " + kind : "");
+    }
+    function showLog(text, open) {
+      logEl.textContent = text || "Ready.";
+      if (open) drawer.classList.remove("collapsed");
+    }
+    function esc(v) {
+      return String(v ?? "").replaceAll("&","&amp;").replaceAll('"',"&quot;").replaceAll("<","&lt;");
+    }
+    function chip(text, kind) {
+      return `<span class="chip ${kind || ""}">${esc(text)}</span>`;
+    }
+    function updateCounts() {
+      const vpsMine = vpsRules.filter((r) => !r.external && Number(r.pub) !== 8080 && Number(r.pub) !== 8443).length;
+      vpsCount.textContent = String(vpsMine || vpsRules.length);
+      routerCount.textContent = String(routerRules.length);
+      hookupCount.textContent = String(hookupRules.length);
+      fwCount.textContent = String(fwRules.length);
+      document.getElementById("ovVps").textContent = String(vpsMine);
+      document.getElementById("ovRouter").textContent = String(routerRules.length);
+      document.getElementById("ovDomains").textContent = String(hookupRules.length);
+      document.getElementById("ovFw").textContent = String(fwRules.length);
+      const pub = hookupRules.filter((r) => r.enabled !== false && !r.vpn_only).length;
+      const vpn = hookupRules.filter((r) => r.enabled !== false && r.vpn_only).length;
+      document.getElementById("ovDomainNote").textContent = `${pub} public · ${vpn} VPN`;
+      document.getElementById("ovFwNote").textContent = fwInfo.active ? "UFW active" : "UFW inactive";
+    }
+    async function api(path, options = {}) {
+      const { timeoutMs = 120000, ...rest } = options;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const res = await fetch(path, {
+          ...rest,
+          signal: ctrl.signal,
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", ...(rest.headers || {}) },
+        });
+        if (res.status === 401) {
+          location.href = "/login.html";
+          throw new Error("unauthorized");
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || data.stderr || `HTTP ${res.status}`);
+        return data;
+      } catch (err) {
+        if (err && err.name === "AbortError") throw new Error("Timed out. Stay on Wi‑Fi and try Save again.");
+        const msg = String(err && err.message ? err.message : err);
+        if (msg === "Failed to fetch" || msg.includes("NetworkError")) {
+          throw new Error("Could not reach the panel.");
+        }
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function readVpsForm() {
+      return [...document.querySelectorAll("#vpsMine .rule, #vpsSystem .rule")]
+        .sort((a, b) => Number(a.dataset.idx) - Number(b.dataset.idx))
+        .map((el) => ({
+          pub: el.querySelector('[data-k="pub"]').value.trim(),
+          proto: el.querySelector('[data-k="proto"]').value,
+          dest_ip: el.querySelector('[data-k="dest_ip"]').value.trim(),
+          dest_port: el.querySelector('[data-k="dest_port"]').value.trim(),
+          name: el.querySelector('[data-k="name"]').value.trim(),
+          external: el.dataset.external === "1",
+          protected: el.dataset.protected === "1",
+        }));
+    }
+    function readRouterForm() {
+      return [...document.querySelectorAll("#routerRows .rule")].map((el) => ({
+        enabled: el.querySelector('[data-k="enabled"]').checked,
+        src: el.querySelector('[data-k="src"]').value,
+        src_dport: el.querySelector('[data-k="src_dport"]').value.trim(),
+        proto: el.querySelector('[data-k="proto"]').value,
+        dest_ip: el.querySelector('[data-k="dest_ip"]').value.trim(),
+        dest_port: el.querySelector('[data-k="dest_port"]').value.trim(),
+        name: el.querySelector('[data-k="name"]').value.trim(),
+        external: el.dataset.external === "1",
+      }));
+    }
+    function readHookupForm() {
+      return [...document.querySelectorAll("#hookupMine .rule, #hookupSystem .rule")]
+        .sort((a, b) => Number(a.dataset.idx) - Number(b.dataset.idx))
+        .map((el) => ({
+          enabled: el.querySelector('[data-k="enabled"]').checked,
+          vpn_only: el.querySelector('[data-k="vpn_only"]').checked,
+          domain: el.querySelector('[data-k="domain"]').value.trim(),
+          target_host: el.querySelector('[data-k="target_host"]').value.trim(),
+          target_port: el.querySelector('[data-k="target_port"]').value.trim(),
+          name: el.querySelector('[data-k="name"]').value.trim(),
+          external: el.dataset.external === "1",
+        }));
+    }
+    function readFwForm() {
+      return [...document.querySelectorAll("#fwMine .rule, #fwSystem .rule")]
+        .sort((a, b) => Number(a.dataset.idx) - Number(b.dataset.idx))
+        .map((el) => ({
+          port: el.querySelector('[data-k="port"]').value.trim(),
+          proto: el.querySelector('[data-k="proto"]').value,
+          action: "allow",
+          comment: el.querySelector('[data-k="comment"]').value.trim(),
+          vpn_only: el.querySelector('[data-k="vpn_only"]').checked,
+          locked: el.dataset.locked === "1",
+        }));
+    }
+
+    function vpsCard(rule, idx) {
+      const protectedPort = Number(rule.pub) === 8080 || Number(rule.pub) === 8443;
+      const locked = !!rule.external || protectedPort;
+      let badge = "";
+      if (rule.external) badge = chip(rule.ufw_only ? "existing UFW" : "existing DNAT", "warn");
+      else if (protectedPort) badge = chip("protected", "warn");
+      const el = document.createElement("div");
+      el.className = "rule" + (locked ? " locked" : "");
+      el.dataset.idx = String(idx);
+      if (rule.external) el.dataset.external = "1";
+      if (protectedPort) el.dataset.protected = "1";
+      el.innerHTML = `
+        <div class="rule-top">
+          <div class="name field"><span>Name</span><input data-k="name" value="${esc(rule.name)}" ${locked ? "readonly" : ""} /></div>
+          ${badge}
+          ${locked ? "" : `<button type="button" class="ghost danger" data-del-vps="${idx}">Remove</button>`}
+        </div>
+        <div class="flow">
+          <div class="field"><span>Public port</span><input data-k="pub" inputmode="numeric" value="${esc(rule.pub)}" ${locked ? "readonly" : ""} /></div>
+          <div class="field"><span>Proto</span><select data-k="proto" ${locked ? "disabled" : ""}><option value="tcp" ${rule.proto==="tcp"?"selected":""}>tcp</option><option value="udp" ${rule.proto==="udp"?"selected":""}>udp</option></select></div>
+          <div class="arrow">→</div>
+          <div class="field wide"><span>LAN device</span>${lanIpField(rule.dest_ip, locked, "dest_ip")}</div>
+          <div class="field"><span>LAN port</span><input data-k="dest_port" inputmode="numeric" value="${esc(rule.dest_port)}" ${locked ? "readonly" : ""} /></div>
+        </div>`;
+      return el;
+    }
+
+    function renderVps() {
+      const mine = document.getElementById("vpsMine");
+      const sys = document.getElementById("vpsSystem");
+      mine.innerHTML = ""; sys.innerHTML = "";
+      let mineN = 0;
+      vpsRules.forEach((rule, idx) => {
+        const protectedPort = Number(rule.pub) === 8080 || Number(rule.pub) === 8443;
+        const card = vpsCard(rule, idx);
+        if (rule.external || protectedPort) sys.appendChild(card);
+        else { mine.appendChild(card); mineN += 1; }
+      });
+      document.getElementById("vpsEmpty").hidden = mineN > 0;
+      sys.parentElement.hidden = sys.children.length === 0;
+      mine.querySelectorAll("[data-del-vps]").forEach((btn) => btn.addEventListener("click", () => {
+        vpsRules = readVpsForm(); vpsRules.splice(Number(btn.dataset.delVps), 1); renderVps(); updateCounts();
+      }));
+      bindIpPickers();
+      updateCounts();
+    }
+
+    function renderRouter() {
+      const root = document.getElementById("routerRows");
+      root.innerHTML = "";
+      document.getElementById("routerEmpty").hidden = routerRules.length > 0;
+      routerRules.forEach((rule, idx) => {
+        const locked = !!rule.external;
+        const el = document.createElement("div");
+        el.className = "rule" + (locked ? " locked" : "") + (rule.enabled === false ? " off" : "");
+        el.dataset.idx = String(idx);
+        if (locked) el.dataset.external = "1";
+        el.innerHTML = `
+          <div class="rule-top">
+            <label class="switch"><input data-k="enabled" type="checkbox" ${rule.enabled !== false ? "checked" : ""} ${locked ? "disabled" : ""} /> On</label>
+            <div class="name field"><span>Name</span><input data-k="name" value="${esc(rule.name)}" ${locked ? "readonly" : ""} /></div>
+            ${locked ? chip("existing router", "warn") : ""}
+            ${locked ? "" : `<button type="button" class="ghost danger" data-del-r="${idx}">Remove</button>`}
+          </div>
+          <div class="flow">
+            <div class="field"><span>Source</span><select data-k="src" ${locked ? "disabled" : ""}><option value="wgclient1" ${rule.src==="wgclient1"?"selected":""}>wgclient1</option><option value="wan" ${rule.src==="wan"?"selected":""}>wan</option></select></div>
+            <div class="field"><span>Listen port</span><input data-k="src_dport" inputmode="numeric" value="${esc(rule.src_dport)}" ${locked ? "readonly" : ""} /></div>
+            <div class="field"><span>Proto</span><select data-k="proto" ${locked ? "disabled" : ""}><option value="tcp" ${rule.proto==="tcp"?"selected":""}>tcp</option><option value="udp" ${rule.proto==="udp"?"selected":""}>udp</option><option value="tcp udp" ${rule.proto==="tcp udp"?"selected":""}>tcp udp</option><option value="all" ${rule.proto==="all"?"selected":""}>all</option></select></div>
+            <div class="arrow">→</div>
+            <div class="field wide"><span>LAN device</span>${lanIpField(rule.dest_ip, locked, "dest_ip")}</div>
+            <div class="field"><span>LAN port</span><input data-k="dest_port" inputmode="numeric" value="${esc(rule.dest_port)}" ${locked ? "readonly" : ""} /></div>
+          </div>`;
+        root.appendChild(el);
+      });
+      root.querySelectorAll("[data-del-r]").forEach((btn) => btn.addEventListener("click", () => {
+        routerRules = readRouterForm(); routerRules.splice(Number(btn.dataset.delR), 1); renderRouter(); updateCounts();
+      }));
+      bindIpPickers();
+      updateCounts();
+    }
+
+    function renderHookups() {
+      const mine = document.getElementById("hookupMine");
+      const sys = document.getElementById("hookupSystem");
+      mine.innerHTML = ""; sys.innerHTML = "";
+      let mineN = 0;
+      hookupRules.forEach((rule, idx) => {
+        const locked = !!rule.external;
+        const el = document.createElement("div");
+        el.className = "rule" + (locked ? " locked" : "") + (rule.enabled === false ? " off" : "");
+        el.dataset.idx = String(idx);
+        if (locked) el.dataset.external = "1";
+        el.innerHTML = `
+          <div class="rule-top">
+            <label class="switch"><input data-k="enabled" type="checkbox" ${rule.enabled !== false ? "checked" : ""} ${locked ? "disabled" : ""} /> On</label>
+            <label class="switch" title="Checked = WireGuard/LAN only"><input data-k="vpn_only" type="checkbox" ${rule.vpn_only ? "checked" : ""} ${locked ? "disabled" : ""} /> VPN only</label>
+            ${chip(rule.vpn_only ? "VPN" : "public", rule.vpn_only ? "warn" : "ok")}
+            ${locked ? chip("existing Caddy", "warn") : ""}
+            ${locked ? "" : `<button type="button" class="ghost danger" data-del-h="${idx}">Remove</button>`}
+          </div>
+          <div class="flow">
+            <div class="field"><span>Domain</span><input data-k="domain" value="${esc(rule.domain)}" ${locked ? "readonly" : ""} placeholder="app.example.com" /></div>
+            <div class="field"><span>Name</span><input data-k="name" value="${esc(rule.name)}" ${locked ? "readonly" : ""} /></div>
+            <div class="arrow">→</div>
+            <div class="field wide"><span>Target device</span>${lanIpField(rule.target_host, locked, "target_host")}</div>
+            <div class="field"><span>Port</span><input data-k="target_port" inputmode="numeric" value="${esc(rule.target_port)}" ${locked ? "readonly" : ""} /></div>
+          </div>`;
+        if (locked) sys.appendChild(el);
+        else { mine.appendChild(el); mineN += 1; }
+      });
+      document.getElementById("hookupEmpty").hidden = mineN > 0;
+      sys.parentElement.hidden = sys.children.length === 0;
+      mine.querySelectorAll("[data-del-h]").forEach((btn) => btn.addEventListener("click", () => {
+        hookupRules = readHookupForm(); hookupRules.splice(Number(btn.dataset.delH), 1); renderHookups(); updateCounts();
+      }));
+      document.querySelectorAll('#hookupMine [data-k="vpn_only"], #hookupMine [data-k="enabled"]').forEach((el) => {
+        el.addEventListener("change", () => { hookupRules = readHookupForm(); renderHookups(); });
+      });
+      bindIpPickers();
+      updateCounts();
+    }
+
+    function renderFirewall() {
+      const mine = document.getElementById("fwMine");
+      const sys = document.getElementById("fwSystem");
+      mine.innerHTML = ""; sys.innerHTML = "";
+      const active = fwInfo.active ? "active" : "inactive";
+      const vpnFrom = fwInfo.vpn_from || "10.8.0.0/24";
+      document.getElementById("fwMeta").innerHTML = `
+        <div class="meta-box"><label>Status</label>${chip(active, fwInfo.active ? "ok" : "warn")}</div>
+        <div class="meta-box"><label>Incoming default</label><div>${esc(fwInfo.default_incoming || "deny")}</div></div>
+        <div class="meta-box"><label>VPN source</label><div class="path">${esc(vpnFrom)}</div></div>
+        <div class="meta-box"><label>Always public</label><div class="hint">22/tcp, 5000/udp, 5002/tcp</div></div>`;
+      document.getElementById("fwHint").textContent = `UFW ${active}. VPN checkbox = WireGuard only.`;
+      let mineN = 0;
+      fwRules.forEach((rule, idx) => {
+        const locked = !!rule.locked;
+        const el = document.createElement("div");
+        el.className = "rule" + (locked ? " locked" : "");
+        el.dataset.idx = String(idx);
+        if (locked) el.dataset.locked = "1";
+        el.innerHTML = `
+          <div class="rule-top">
+            <label class="switch"><input data-k="vpn_only" type="checkbox" ${rule.vpn_only ? "checked" : ""} ${locked ? "disabled" : ""} /> VPN only</label>
+            ${chip(rule.vpn_only ? "VPN" : "public", rule.vpn_only ? "warn" : "ok")}
+            ${locked ? chip("protected", "warn") : ""}
+            ${locked ? "" : `<button type="button" class="ghost danger" data-del-fw="${idx}">Remove</button>`}
+          </div>
+          <div class="flow">
+            <div class="field"><span>Port</span><input data-k="port" inputmode="numeric" value="${esc(rule.port)}" ${locked ? "readonly" : ""} /></div>
+            <div class="field"><span>Proto</span><select data-k="proto" ${locked ? "disabled" : ""}><option value="tcp" ${rule.proto==="tcp"?"selected":""}>tcp</option><option value="udp" ${rule.proto==="udp"?"selected":""}>udp</option></select></div>
+            <div class="field"><span>Comment</span><input data-k="comment" value="${esc(rule.comment)}" ${locked ? "readonly" : ""} /></div>
+          </div>`;
+        if (locked) sys.appendChild(el);
+        else { mine.appendChild(el); mineN += 1; }
+      });
+      document.getElementById("fwEmpty").hidden = mineN > 0;
+      sys.parentElement.hidden = sys.children.length === 0;
+      mine.querySelectorAll("[data-del-fw]").forEach((btn) => btn.addEventListener("click", () => {
+        fwRules = readFwForm(); fwRules.splice(Number(btn.dataset.delFw), 1); renderFirewall(); updateCounts();
+      }));
+      mine.querySelectorAll('[data-k="vpn_only"]').forEach((el) => {
+        el.addEventListener("change", () => { fwRules = readFwForm(); renderFirewall(); });
+      });
+      updateCounts();
+    }
+
+    function renderAll() {
+      refreshLanDatalist();
+      renderVps(); renderRouter(); renderHookups(); renderFirewall();
+    }
+
+    async function load() {
+      setStatus("Loading…"); showLog("Loading configuration…");
+      const data = await api("/api/forwards");
+      comments = data.vps?.comments || [];
+      vpsRules = data.vps?.rules || [];
+      routerRules = data.router?.rules || [];
+      hookupRules = data.hookups?.rules || [];
+      fwInfo = data.firewall || {};
+      fwRules = fwInfo.rules || [];
+      lanDevices = data.lan_devices?.devices || [];
+      dmzIpEl.value = data.router?.dmz_ip || "";
+      document.getElementById("routerHint").textContent =
+        `Flint ${data.router?.host || ""} — local WAN/WG only.`;
+      document.getElementById("hookupsHint").textContent = data.hookups?.caddyfile
+        ? `Caddy file: ${data.hookups.caddyfile}`
+        : "HTTPS reverse proxies";
+      if (data.hookups?.dns_hint) dnsHint.textContent = data.hookups.dns_hint;
+      pathLabel.textContent = "tap to expand";
+      renderAll();
+      if (data.router && data.router.ok === false) {
+        setStatus("Router offline over VPN — fix WireGuard on the Flint (see log)", "err");
+      } else {
+        setStatus("Ready", "ok");
+      }
+      showLog(data.router && data.router.ok === false
+        ? `Router unreachable at ${data.router.host || "10.8.0.3"}. After factory reset: connect to Flint Wi‑Fi, re-import the GL-MT6000 profile from https://vpn.vpstruelord.com, enable SSH, then run /opt/wireguard/scripts/flint-post-reset.sh on the router.\n\n${data.router.error || ""}`
+        : (lanDevices.length
+        ? `Loaded. LAN: ${lanDevices.map((d) => d.hostname ? `${d.ip} (${d.hostname})` : d.ip).join(", ")}`
+        : "Configuration loaded."));
+      loadBond().catch(() => {});
+    }
+
+    async function refreshLanDevices() {
+      setStatus("Loading LAN…");
+      try {
+        const data = await api("/api/lan-devices");
+        lanDevices = data.devices || [];
+        renderAll();
+        setStatus(`LAN ${lanDevices.length}`, data.ok === false ? "err" : "ok");
+        showLog(data.ok === false
+          ? `LAN refresh failed: ${data.error || "unknown"}`
+          : `LAN devices (${lanDevices.length})\n` + lanDevices.map((d) => `${d.ip}\t${d.hostname || "-"}\t${d.mac || ""}`).join("\n"), true);
+      } catch (err) {
+        setStatus(String(err.message || err), "err");
+      }
+    }
+
+    async function save() {
+      vpsRules = readVpsForm();
+      routerRules = readRouterForm();
+      hookupRules = readHookupForm();
+      fwRules = readFwForm();
+      [saveBtn, reloadBtn].forEach((b) => (b.disabled = true));
+      setStatus("Applying…");
+      showLog("Applying VPS, router, domains, and firewall…", true);
+      try {
+        const result = await api("/api/forwards", {
+          method: "PUT",
+          body: JSON.stringify({
+            vps: { rules: vpsRules, comments },
+            router: { dmz_ip: dmzIpEl.value.trim(), rules: routerRules },
+            hookups: { rules: hookupRules },
+            firewall: { rules: fwRules },
+          }),
+        });
+        vpsRules = result.vps?.rules || vpsRules;
+        routerRules = result.router?.rules || routerRules;
+        hookupRules = result.hookups?.rules || hookupRules;
+        fwInfo = result.firewall || fwInfo;
+        fwRules = fwInfo.rules || fwRules;
+        if (result.router?.dmz_ip) dmzIpEl.value = result.router.dmz_ip;
+        if (result.hookups?.dns_hint) dnsHint.textContent = result.hookups.dns_hint;
+        renderAll();
+        const log = [
+          "=== Internet / VPS ===", result.vps?.stdout, result.vps?.stderr,
+          "=== Router ===", result.router?.stdout, result.router?.stderr,
+          "=== Domains / Caddy ===", result.hookups?.stdout, result.hookups?.stderr,
+          "=== Firewall / UFW ===", result.firewall?.stdout, result.firewall?.stderr,
+        ].filter(Boolean).join("\n").trim();
+        showLog(log || "Applied.", true);
+        setStatus(result.ok ? "Applied" : "Apply errors", result.ok ? "ok" : "err");
+      } catch (err) {
+        setStatus(err.message || "Save failed", "err");
+        showLog(String(err.message || err), true);
+      } finally {
+        [saveBtn, reloadBtn].forEach((b) => (b.disabled = false));
+      }
+    }
+
+    document.querySelectorAll(".nav-btn").forEach((btn) => {
+      btn.addEventListener("click", () => showView(btn.dataset.view));
+    });
+    document.querySelectorAll("[data-go]").forEach((btn) => {
+      btn.addEventListener("click", () => showView(btn.dataset.go));
+    });
+    document.getElementById("drawerHead").addEventListener("click", () => {
+      drawer.classList.toggle("collapsed");
+    });
+    document.getElementById("addVpsBtn").addEventListener("click", () => {
+      vpsRules = readVpsForm();
+      vpsRules.push({ pub:"", proto:"tcp", dest_ip: dmzIpEl.value || "192.168.8.243", dest_port:"", name:"new-rule" });
+      renderVps(); showView("vps");
+    });
+    document.getElementById("addRouterBtn").addEventListener("click", () => {
+      routerRules = readRouterForm();
+      routerRules.push({ enabled:true, src:"wgclient1", src_dport:"", proto:"tcp", dest_ip: dmzIpEl.value || "192.168.8.243", dest_port:"", name:"new-rule" });
+      renderRouter();
+    });
+    document.getElementById("addHookupBtn").addEventListener("click", () => {
+      hookupRules = readHookupForm();
+      hookupRules.push({ enabled:true, vpn_only:false, domain:"", target_host:"192.168.8.1", target_port:"80", name:"new-domain" });
+      renderHookups();
+    });
+    document.getElementById("addFwBtn").addEventListener("click", () => {
+      fwRules = readFwForm();
+      fwRules.push({ port:"", proto:"tcp", action:"allow", comment:"new-rule", locked:false, vpn_only:true });
+      renderFirewall();
+    });
+    reloadBtn.addEventListener("click", () => load().catch((e) => setStatus(e.message, "err")));
+    saveBtn.addEventListener("click", () => save());
+    document.getElementById("refreshLanBtn").addEventListener("click", () => {
+      refreshLanDevices().catch((e) => setStatus(e.message, "err"));
+    });
+    document.getElementById("refreshLanBtnOv").addEventListener("click", () => {
+      refreshLanDevices().catch((e) => setStatus(e.message, "err"));
+    });
+    document.getElementById("logoutBtn").addEventListener("click", () => { location.href = "/logout"; });
+
+    function fmtBytes(n) {
+      n = Number(n) || 0;
+      if (n > 1048576) return (n / 1048576).toFixed(1) + " MB";
+      if (n > 1024) return (n / 1024).toFixed(0) + " KB";
+      return n + " B";
+    }
+    function renderBond(data) {
+      const router = data.router || {};
+      const state = data.state || router.state || "STOPPED";
+      const kind = state === "CONNECTED" ? "ok" : (state === "STOPPED" || state === "WAITING" ? "warn" : "");
+      document.getElementById("bondCount").textContent = state === "CONNECTED" ? "on" : "off";
+      document.getElementById("ovBond").textContent = state === "CONNECTED" ? "On" : "Off";
+      document.getElementById("ovBondNote").textContent = state.toLowerCase();
+      const links = Array.isArray(data.links) ? data.links : [];
+      const mode = router.mode || "speed";
+      const pub = state === "CONNECTED" ? (data.host || "VPS IP") : "home ISP";
+      const activePort = router.port || (data.vps && data.vps.port) || data.port || 8443;
+      const ports = (router.ports || data.ports || [8443, 51820, 4410]).join(", ");
+      document.getElementById("bondMeta").innerHTML = `
+        <div class="meta-box"><label>Status</label>${chip(state, kind)}</div>
+        <div class="meta-box"><label>Mode</label><div>${esc(mode)} bonding</div></div>
+        <div class="meta-box"><label>Internet exit</label><div>${esc(pub)}</div></div>
+        <div class="meta-box"><label>LAN steered</label><div>${router.policy_active ? "yes" : "no (local WAN)"}</div></div>
+        <div class="meta-box"><label>VPS UDP port</label><div>${esc(activePort)} <span class="hint">try ${esc(ports)}</span></div></div>
+        <div class="meta-box"><label>Flint client</label><div>${data.router_active ? "running" : "stopped"}</div></div>`;
+      const box = document.getElementById("bondLinks");
+      box.innerHTML = links.length ? links.map((a) => `
+        <div class="rule">
+          <div class="rule-top"><strong>${esc(a.iface || a.ip || "channel")}</strong>${chip(a.up ? "up" : "down", a.up ? "ok" : "warn")}</div>
+          <div class="hint">${esc(a.ip || "")} · up ${fmtBytes(a.bytes_up)} · down ${fmtBytes(a.bytes_down)}</div>
+        </div>`).join("") : `<div class="empty">No WAN channels yet. Connect, or plug in USB LTE / phone tether and Refresh.</div>`;
+    }
+    async function loadBond() {
+      const data = await api("/api/bond");
+      renderBond(data);
+      return data;
+    }
+    async function bondAction(action) {
+      setStatus("Bonding: " + action + "…");
+      const result = await api("/api/bond", {
+        method: "POST",
+        body: JSON.stringify({ action }),
+        timeoutMs: 120000,
+      });
+      const state = result.bond || result;
+      if (state && state.state) renderBond(state);
+      showLog([result.stdout, result.stderr, result.error].filter(Boolean).join("\n") || "Bonding updated.", true);
+      setStatus(result.ok === false ? (result.error || "Bonding error") : "Bonding ready", result.ok === false ? "err" : "ok");
+      return result;
+    }
+    document.getElementById("bondRefreshBtn").addEventListener("click", () => {
+      loadBond().then(() => setStatus("Bonding refreshed", "ok")).catch((e) => setStatus(e.message, "err"));
+    });
+    document.getElementById("bondInstallBtn").addEventListener("click", () => {
+      bondAction("install").catch((e) => setStatus(e.message, "err"));
+    });
+    document.getElementById("bondStartBtn").addEventListener("click", () => {
+      bondAction("start").catch((e) => setStatus(e.message, "err"));
+    });
+    document.getElementById("bondStopBtn").addEventListener("click", () => {
+      bondAction("stop").catch((e) => setStatus(e.message, "err"));
+    });
+
+    load().catch((e) => setStatus(e.message, "err"));
+  </script>
+</body>
+</html>
