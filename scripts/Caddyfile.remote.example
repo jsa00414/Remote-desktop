@@ -1,0 +1,8 @@
+# Caddy example — separate website from True Mail
+# True Mail stays on mail.truemailor.com
+# Remote Desktop on remote.truemailor.com → port 5000
+
+remote.truemailor.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:5000
+}

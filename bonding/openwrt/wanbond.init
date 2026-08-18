@@ -1,0 +1,28 @@
+#!/bin/sh /etc/rc.common
+START=99
+USE_PROCD=1
+
+# Blank OpenWrt template. Copy to /etc/init.d/wanbond on the Flint.
+# Key file: /etc/wanbond.key  (same secret as the VPS, not stored in git)
+
+start_service() {
+  modprobe tun 2>/dev/null || true
+  mkdir -p /dev/net
+  [ -c /dev/net/tun ] || mknod /dev/net/tun c 10 200 2>/dev/null || true
+  sh /usr/share/wanbond-unkill.sh 2>/dev/null || true
+  KEY=$(cat /etc/wanbond.key 2>/dev/null | tr -d '\n')
+  HOST="${VPS_PUBLIC_IP:-YOUR.VPS.IP}"
+  procd_open_instance
+  procd_set_param command python3 /usr/share/wanbond.py client --key "$KEY" --host "$HOST" --port 8443 --ports 8443,51820,4410 --mode speed --egress vps --lan-bond
+  procd_set_param respawn
+  procd_close_instance
+}
+
+stop_service() {
+  ip rule del from 192.168.8.0/24 lookup 80 2>/dev/null || true
+  ip rule del from 192.168.8.0/24 to 192.168.8.0/24 lookup main 2>/dev/null || true
+  ip route flush table 80 2>/dev/null || true
+  ip link set smbond down 2>/dev/null || true
+  kill $(pgrep -f '[p]ython3 /usr/share/wanbond.py') 2>/dev/null || true
+  sh /usr/share/wanbond-unkill.sh 2>/dev/null || true
+}

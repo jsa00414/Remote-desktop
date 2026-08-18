@@ -1,0 +1,10 @@
+data/
+node_modules/
+npm-debug.log*
+.DS_Store
+.env
+*.log
+__pycache__/
+*.pyc
+bonding/portal/port-forward-ui.env
+**/wanbond.key

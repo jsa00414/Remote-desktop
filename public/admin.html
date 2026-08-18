@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin · Remote Desktop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <div id="login-view" class="auth-view">
+      <div class="auth-atmosphere" aria-hidden="true"></div>
+      <main class="auth-panel">
+        <p class="brand">Remote Desktop</p>
+        <h1>Admin</h1>
+        <p class="auth-sub">Sign in to add and manage host computers.</p>
+        <form id="admin-login-form" class="auth-form" autocomplete="off">
+          <label class="field">
+            <span>Admin password</span>
+            <input id="admin-password" type="password" required autofocus placeholder="Password" />
+          </label>
+          <p id="admin-login-error" class="auth-error" hidden></p>
+          <button type="submit" class="btn primary">Sign in</button>
+        </form>
+        <p class="host-hint"><a href="/">← Back to devices</a></p>
+      </main>
+    </div>
+
+    <div id="admin-view" class="admin-view" hidden>
+      <div class="auth-atmosphere admin-atmosphere" aria-hidden="true"></div>
+      <main class="admin-shell">
+        <header class="admin-header">
+          <div>
+            <p class="brand">Remote Desktop</p>
+            <h1>Host computers</h1>
+            <p class="auth-sub">Add a computer, then open <code>/host</code> on that machine with its setup code.</p>
+          </div>
+          <div class="row-actions">
+            <a class="btn ghost" href="/">Devices</a>
+            <button type="button" class="btn ghost" id="logout-btn">Sign out</button>
+          </div>
+        </header>
+
+        <section class="admin-panel-card">
+          <h2>Add computer</h2>
+          <form id="add-host-form" class="add-host-form" autocomplete="off">
+            <label class="field">
+              <span>Computer name</span>
+              <input id="new-host-name" type="text" maxlength="64" required placeholder="Office PC" />
+            </label>
+            <label class="field">
+              <span>PIN</span>
+              <input id="new-host-pin" type="text" inputmode="numeric" maxlength="12" value="8112026" required />
+            </label>
+            <button type="submit" class="btn primary">Add host</button>
+          </form>
+          <p id="add-host-error" class="auth-error" hidden></p>
+        </section>
+
+        <section>
+          <h2 class="section-title">Your computers</h2>
+          <div id="admin-host-list" class="admin-host-list"></div>
+          <p id="admin-empty" class="home-empty" hidden>No hosts yet. Add one above.</p>
+        </section>
+      </main>
+    </div>
+
+    <script src="/js/admin.js"></script>
+  </body>
+</html>

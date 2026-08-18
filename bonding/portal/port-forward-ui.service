@@ -1,0 +1,15 @@
+[Unit]
+Description=Port Forward UI for Flint/VPS forwards.conf
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/wireguard/port-forward-ui
+EnvironmentFile=/opt/wireguard/port-forward-ui.env
+ExecStart=/usr/bin/python3 /opt/wireguard/port-forward-ui/server.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=Remote Desktop connected host
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=__DEPLOY_PATH__
+Environment=PORT=__APP_PORT__
+Environment=DISPLAY=:1
+Environment=HOST_NAME=Connected host
+ExecStart=/usr/bin/node __DEPLOY_PATH__/server.js
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target
